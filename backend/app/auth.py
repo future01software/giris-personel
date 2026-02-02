@@ -32,9 +32,12 @@ async def register(user_data: UserCreate):
 
 @router.post("/login")
 async def login(credentials: UserLogin):
-    email = norm_email(str(credentials.email))
+    # Support both username and email fields during transition
+    identity = (credentials.username or credentials.email or "").strip().lower()
+    if not identity:
+        raise HTTPException(status_code=422, detail="Username or email is required")
 
-    user = await db.users.find_one({"email": email}, {"_id": 0})
+    user = await db.users.find_one({"email": identity}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
