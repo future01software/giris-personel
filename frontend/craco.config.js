@@ -88,8 +88,9 @@ const cracoConfig = {
         // Performance hints
         webpackConfig.performance = {
           ...webpackConfig.performance,
-          maxEntrypointSize: 512000,
-          maxAssetSize: 512000,
+          maxEntrypointSize: 1024000,
+          maxAssetSize: 1024000,
+          hints: isDevServer ? false : "warning",
         };
       }
 
