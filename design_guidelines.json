@@ -1,0 +1,139 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "GateKeeper Pro",
+      "tone": "Industrial Authority",
+      "core_values": ["Speed", "Clarity", "Safety", "Traceability"],
+      "visual_archetype": "Swiss Utility"
+    },
+    "typography": {
+      "font_family": {
+        "headings": "Oswald, sans-serif",
+        "body": "Public Sans, sans-serif",
+        "mono": "JetBrains Mono, monospace"
+      },
+      "weights": {
+        "light": 300,
+        "regular": 400,
+        "medium": 500,
+        "bold": 700
+      },
+      "scale": {
+        "h1": "text-4xl md:text-5xl font-bold tracking-tight uppercase",
+        "h2": "text-3xl font-bold tracking-tight",
+        "h3": "text-2xl font-semibold",
+        "body_lg": "text-lg leading-relaxed",
+        "body_base": "text-base leading-relaxed",
+        "caption": "text-sm text-muted-foreground uppercase tracking-wider"
+      },
+      "imports": [
+        "@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;700&family=Public+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');"
+      ]
+    },
+    "colors": {
+      "theme_mode": "hybrid",
+      "palette": {
+        "primary": {
+          "name": "Industrial Slate",
+          "hex": "#0f172a",
+          "tailwind": "slate-900"
+        },
+        "secondary": {
+          "name": "Safety Orange",
+          "hex": "#f97316",
+          "tailwind": "orange-500"
+        },
+        "background": {
+          "light": "#f8fafc",
+          "dark": "#020617"
+        },
+        "surface": {
+          "light": "#ffffff",
+          "dark": "#0f172a"
+        },
+        "status": {
+          "success": "#10b981",
+          "warning": "#f59e0b",
+          "error": "#ef4444",
+          "info": "#3b82f6"
+        }
+      },
+      "gradients": {
+        "primary": "bg-gradient-to-br from-slate-900 to-slate-800",
+        "glass": "bg-white/80 backdrop-blur-md border border-white/20 shadow-sm"
+      }
+    },
+    "layout": {
+      "spacing_scale": "generous",
+      "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+      "grid_systems": {
+        "dashboard": "grid grid-cols-1 md:grid-cols-12 gap-6",
+        "gate_view": "grid grid-cols-1 lg:grid-cols-2 gap-8 h-[calc(100vh-4rem)]",
+        "bento": "grid grid-cols-1 md:grid-cols-4 gap-4"
+      },
+      "border_radius": {
+        "default": "rounded-lg",
+        "card": "rounded-xl",
+        "button": "rounded-md"
+      }
+    },
+    "components": {
+      "buttons": {
+        "primary": "bg-slate-900 text-white hover:bg-slate-800 shadow-md transition-all active:scale-95 uppercase tracking-wide font-medium",
+        "secondary": "bg-white text-slate-900 border border-slate-200 hover:bg-slate-50 shadow-sm transition-all active:scale-95 uppercase tracking-wide font-medium",
+        "danger": "bg-red-600 text-white hover:bg-red-700 shadow-md transition-all active:scale-95 uppercase tracking-wide font-medium",
+        "success": "bg-emerald-600 text-white hover:bg-emerald-700 shadow-md transition-all active:scale-95 uppercase tracking-wide font-medium"
+      },
+      "cards": {
+        "default": "bg-card text-card-foreground rounded-xl border shadow-sm hover:shadow-md transition-shadow duration-200",
+        "interactive": "bg-card text-card-foreground rounded-xl border shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer"
+      },
+      "inputs": {
+        "default": "h-12 px-4 rounded-md border border-input bg-background text-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+      },
+      "status_indicators": {
+        "green": "bg-emerald-100 text-emerald-800 border-emerald-200",
+        "yellow": "bg-amber-100 text-amber-800 border-amber-200",
+        "red": "bg-red-100 text-red-800 border-red-200"
+      }
+    },
+    "motion": {
+      "transitions": "transition-all duration-200 ease-in-out",
+      "hover_effects": "hover:shadow-lg hover:-translate-y-0.5",
+      "page_transition": {
+        "initial": { "opacity": 0, "y": 10 },
+        "animate": { "opacity": 1, "y": 0 },
+        "exit": { "opacity": 0, "y": -10 }
+      }
+    },
+    "assets": {
+      "icons": "lucide-react",
+      "images": {
+        "login_bg": "https://images.unsplash.com/photo-1669487597626-8930ef1cd4e8?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "security_guard": "https://images.unsplash.com/photo-1652148555073-4b1d2ecd664c?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "worker_avatar_1": "https://images.unsplash.com/photo-1722230428078-591f520674b0?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "worker_avatar_2": "https://images.unsplash.com/photo-1760025128820-1548e72b3cba?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "worker_avatar_3": "https://images.unsplash.com/photo-1646227655718-dd721b681d91?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "factory_gate": "https://images.unsplash.com/photo-1551575911-944596704af0?crop=entropy&cs=srgb&fm=jpg&q=85"
+      }
+    }
+  },
+  "implementation_guide": {
+    "steps": [
+      "Install fonts: Oswald and Public Sans via Google Fonts in index.css",
+      "Configure Tailwind theme with new colors and font families",
+      "Create 'Layout' component with Sidebar (Admin) and Topbar (Security)",
+      "Build 'StatusBadge' component for document validity (Green/Yellow/Red)",
+      "Implement 'GateEntry' view with split-screen layout (Search Left, Result Right)",
+      "Develop 'PersonnelCard' with large avatar and clear status indicators",
+      "Ensure all buttons have minimum 44px height for touch targets"
+    ],
+    "universal_rules": [
+      "Use 'Oswald' for all headings (h1-h3) and 'Public Sans' for body text",
+      "Always use uppercase for buttons and labels to increase legibility",
+      "Ensure high contrast for outdoor visibility (avoid light gray text)",
+      "Use 'slate-900' for primary actions and 'orange-500' for urgent alerts",
+      "Add 'data-testid' to all interactive elements"
+    ]
+  }
+}

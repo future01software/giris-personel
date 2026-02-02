@@ -1,0 +1,78 @@
+import os
+from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT_DIR / ".env")
+
+mongo_url = os.environ.get("MONGO_URL")
+db_name = os.environ.get("DB_NAME")
+
+if not mongo_url:
+    raise RuntimeError("MONGO_URL not set in environment")
+if not db_name:
+    raise RuntimeError("DB_NAME not set in environment")
+
+client = AsyncIOMotorClient(
+    mongo_url,
+    maxPoolSize=100,        # Increased from 50
+    minPoolSize=10,         # Increased from 5
+    maxIdleTimeMS=45000,
+    serverSelectionTimeoutMS=5000,
+    connectTimeoutMS=10000,
+    socketTimeoutMS=45000,
+)
+
+db = client[db_name]
+
+
+async def ensure_indexes():
+    try: await db.users.create_index("email", unique=True)
+    except Exception: pass
+    try: await db.users.create_index("id", unique=True)
+    except Exception: pass
+
+    try: await db.personnel.create_index("id", unique=True)
+    except Exception: pass
+    try: await db.personnel.create_index("company")
+    except Exception: pass
+    try: await db.personnel.create_index("tc_number")
+    except Exception: pass
+    try: await db.personnel.create_index("full_name")
+    except Exception: pass
+    # Compound index for common queries
+    try: await db.personnel.create_index([("company", 1), ("assignment_end", 1)])
+    except Exception: pass
+
+    try:
+        await db.personnel_documents.create_index([("personnel_id", 1), ("document_type_id", 1)])
+    except Exception:
+        pass
+    try: await db.personnel_documents.create_index("personnel_id")
+    except Exception: pass
+    try: await db.personnel_documents.create_index("document_type_id")
+    except Exception: pass
+    # Index for expiry queries
+    try: await db.personnel_documents.create_index("expiry_date")
+    except Exception: pass
+
+    try: await db.entry_logs.create_index([("timestamp", -1)])
+    except Exception: pass
+    try: await db.entry_logs.create_index([("created_at", -1)])
+    except Exception: pass
+    try: await db.entry_logs.create_index("personnel_id")
+    except Exception: pass
+    try: await db.entry_logs.create_index("person_id")
+    except Exception: pass
+    # Compound indexes for timestamp queries
+    try: await db.entry_logs.create_index([("created_at_ts", -1)])
+    except Exception: pass
+    try: await db.entry_logs.create_index([("timestamp_ts", -1)])
+    except Exception: pass
+    # Compound index for person + timestamp queries
+    try: await db.entry_logs.create_index([("person_id", 1), ("created_at_ts", -1)])
+    except Exception: pass
+
+    try: await db.document_types.create_index("id", unique=True)
+    except Exception: pass
