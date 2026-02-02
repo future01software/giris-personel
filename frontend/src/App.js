@@ -1,3 +1,4 @@
+// Deployment Trigger: 2026-02-02-22-48
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
