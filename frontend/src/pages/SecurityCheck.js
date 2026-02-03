@@ -421,18 +421,24 @@ const SecurityCheck = () => {
         <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-4 flex flex-col">
           {/* ✅ İçeride (kart görünüm) */}
           <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                İçeride ({insideList.length})
-              </div>
+<div className="flex items-center justify-between mb-3">
+  <div>
+    <div className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+      İçeride <span className="text-slate-500 dark:text-slate-300">({insideList.length})</span>
+    </div>
+    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+      Anlık içeride bulunan personel ve süreleri
+    </div>
+  </div>
 
-              <button
-                onClick={fetchInside}
-                className="text-xs px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800"
-              >
-                Yenile
-              </button>
-            </div>
+  <button
+    onClick={fetchInside}
+    className="h-10 px-4 rounded-lg bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors text-sm font-semibold shadow-sm"
+  >
+    Yenile
+  </button>
+</div>
+
 
             {insideLoading ? (
               <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-500 dark:text-slate-400">
