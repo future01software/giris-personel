@@ -1,5 +1,5 @@
 // src/pages/SecurityCheck.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { Search, User, DoorOpen, DoorClosed } from 'lucide-react';
@@ -27,15 +27,103 @@ const formatDurationTR = (ms) => {
 
   const pad2 = (n) => String(n).padStart(2, '0');
 
-  // Örnekler:
-  // 22s 04dk 12sn
-  // 4s 54dk 14sn
-  // 28dk 06sn
-  // 12sn
   if (days > 0) return `${days}g ${pad2(hours)}s ${pad2(mins)}dk ${pad2(secs)}sn`;
   if (hours > 0) return `${hours}s ${pad2(mins)}dk ${pad2(secs)}sn`;
   if (mins > 0) return `${mins}dk ${pad2(secs)}sn`;
   return `${secs}sn`;
+};
+
+const normalizeAction = (log) => {
+  const raw = log?.action ?? log?.type ?? log?.decision ?? log?.status ?? '';
+  const v = String(raw).trim().toLowerCase();
+
+  if (v === 'in' || v === 'entry' || v === 'enter' || v === 'entered') return 'in';
+  if (v === 'out' || v === 'exit' || v === 'exited') return 'out';
+  if (v === 'approved' || v === 'allow' || v === 'allowed' || v === 'accepted' || v === 'ok')
+    return 'in';
+  if (v === 'rejected' || v === 'deny' || v === 'denied' || v === 'not_ok' || v === 'no')
+    return 'out';
+
+  return '';
+};
+
+const normalizeDecision = (x) => {
+  const v = normalizeAction(x);
+  if (v === 'in') return 'IN';
+  if (v === 'out') return 'OUT';
+  return '';
+};
+
+const getLogTs = (x) =>
+  x?.timestamp ||
+  x?.created_at ||
+  x?.createdAt ||
+  x?.entry_time ||
+  x?.exit_time ||
+  '';
+
+const getLogGate = (x) => x?.gate || x?.gate_key || x?.gateKey || x?.location_gate || '';
+
+const sameInside = (a = [], b = []) => {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (
+      String(a[i]?.personnel_id) !== String(b[i]?.personnel_id) ||
+      Number(a[i]?.last_ts || 0) !== Number(b[i]?.last_ts || 0) ||
+      String(a[i]?.gate || '') !== String(b[i]?.gate || '')
+    ) return false;
+  }
+  return true;
+};
+
+const computeInsideFromLogs = (logs, gate) => {
+  const latestByPid = new Map();
+
+  for (const x of logs || []) {
+    const pid =
+      x?.personnel_id || x?.personnelId || x?.person_id || x?.personId || x?.personnel?.id;
+
+    if (!pid) continue;
+
+    const g = getLogGate(x);
+    // Gate filtresi: loglarda gate varsa uygula, yoksa genel liste olur
+    if (gate && g && String(g) !== String(gate)) continue;
+
+    const ts = new Date(getLogTs(x) || 0).getTime();
+    const prev = latestByPid.get(String(pid));
+    if (!prev || ts > prev.ts) {
+      latestByPid.set(String(pid), { ts, log: x });
+    }
+  }
+
+  const items = [];
+  for (const [pid, v] of latestByPid.entries()) {
+    const dec = normalizeDecision(v.log);
+    if (dec !== 'IN') continue;
+
+    const p = v.log?.personnel || v.log?.person || {};
+    const fullName =
+      v.log?.full_name ||
+      p?.full_name ||
+      `${p?.first_name || ''} ${p?.last_name || ''}`.trim() ||
+      `ID: ${pid}`;
+
+    const g = getLogGate(v.log) || '';
+    const gateLabel = GATES.find((z) => z.value === g)?.label || '';
+
+    items.push({
+      personnel_id: pid,
+      full_name: fullName,
+      company: v.log?.company || p?.company || '',
+      last_ts: v.ts,
+      gate: g,
+      gate_label: gateLabel,
+    });
+  }
+
+  // En yeni giriş üstte
+  items.sort((a, b) => (b.last_ts || 0) - (a.last_ts || 0));
+  return items;
 };
 
 const SecurityCheck = () => {
@@ -51,12 +139,15 @@ const SecurityCheck = () => {
   const [entryLoading, setEntryLoading] = useState(false);
   const [isInside, setIsInside] = useState(false);
 
-  // ✅ İçeridekiler listesi
   const [insideList, setInsideList] = useState([]);
   const [insideLoading, setInsideLoading] = useState(false);
 
-  // ✅ anlık süre için tick
+  // sürelerin akması için
   const [nowTick, setNowTick] = useState(Date.now());
+
+  // içeride listesi scroll zıplamasın diye
+  const insideScrollRef = useRef(null);
+  const insideScrollTopRef = useRef(0);
 
   const [selectedGate, setSelectedGate] = useState(
     () => localStorage.getItem(GATE_KEY) || 'PORT_FACILITY'
@@ -88,93 +179,14 @@ const SecurityCheck = () => {
     }
   };
 
-  const normalizeAction = (log) => {
-    const raw = log?.action ?? log?.type ?? log?.decision ?? log?.status ?? '';
-    const v = String(raw).trim().toLowerCase();
+  const fetchInside = async ({ silent = false } = {}) => {
+    // otomatik yenilemede loading açma -> kıpırdama biter
+    if (!silent) setInsideLoading(true);
 
-    if (v === 'in' || v === 'entry' || v === 'enter' || v === 'entered') return 'in';
-    if (v === 'out' || v === 'exit' || v === 'exited') return 'out';
-    if (v === 'approved' || v === 'allow' || v === 'allowed' || v === 'accepted' || v === 'ok')
-      return 'in';
-    if (v === 'rejected' || v === 'deny' || v === 'denied' || v === 'not_ok' || v === 'no')
-      return 'out';
+    // scroll pozisyonu koru
+    const el = insideScrollRef.current;
+    if (el) insideScrollTopRef.current = el.scrollTop;
 
-    return '';
-  };
-
-  const getLogTs = (x) =>
-    x?.timestamp ||
-    x?.created_at ||
-    x?.createdAt ||
-    x?.entry_time ||
-    x?.exit_time ||
-    '';
-
-  const getLogGate = (x) =>
-    x?.gate || x?.gate_key || x?.gateKey || x?.location_gate || '';
-
-  const normalizeDecision = (x) => {
-    const v = normalizeAction(x);
-    if (v === 'in') return 'IN';
-    if (v === 'out') return 'OUT';
-    return '';
-  };
-
-  const computeInsideFromLogs = (logs, gate) => {
-    const latestByPid = new Map();
-
-    for (const x of logs || []) {
-      const pid =
-        x?.personnel_id ||
-        x?.personnelId ||
-        x?.person_id ||
-        x?.personId ||
-        x?.personnel?.id;
-
-      if (!pid) continue;
-
-      const g = getLogGate(x);
-      // Gate filtresi: loglarda gate alanı varsa uygula; yoksa genel listeler
-      if (gate && g && String(g) !== String(gate)) continue;
-
-      const ts = new Date(getLogTs(x) || 0).getTime();
-      const prev = latestByPid.get(String(pid));
-      if (!prev || ts > prev.ts) {
-        latestByPid.set(String(pid), { ts, log: x });
-      }
-    }
-
-    const items = [];
-    for (const [pid, v] of latestByPid.entries()) {
-      const dec = normalizeDecision(v.log);
-      if (dec !== 'IN') continue;
-
-      const p = v.log?.personnel || v.log?.person || {};
-      const fullName =
-        v.log?.full_name ||
-        p?.full_name ||
-        `${p?.first_name || ''} ${p?.last_name || ''}`.trim() ||
-        `ID: ${pid}`;
-
-      const g = getLogGate(v.log) || '';
-      const gateLabel = GATES.find((z) => z.value === g)?.label || '';
-
-      items.push({
-        personnel_id: pid,
-        full_name: fullName,
-        company: v.log?.company || p?.company || '',
-        last_ts: v.ts,
-        gate: g,
-        gate_label: gateLabel,
-      });
-    }
-
-    items.sort((a, b) => (b.last_ts || 0) - (a.last_ts || 0));
-    return items;
-  };
-
-  const fetchInside = async () => {
-    setInsideLoading(true);
     try {
       const logsRes = await axios.get(`${API}/entry/logs?limit=1000`);
       const list = Array.isArray(logsRes.data)
@@ -182,19 +194,31 @@ const SecurityCheck = () => {
         : logsRes.data?.data || logsRes.data?.items || [];
 
       const inside = computeInsideFromLogs(list, selectedGate);
-      setInsideList(inside);
+
+      setInsideList((prev) => (sameInside(prev, inside) ? prev : inside));
     } catch (e) {
       console.error('Failed to fetch inside list', e);
-      setInsideList([]);
+      // silent refresh'te boşaltma yapma -> ekrandaki liste zıplamasın
+      if (!silent) setInsideList([]);
     } finally {
-      setInsideLoading(false);
+      if (!silent) setInsideLoading(false);
+
+      // scroll geri yükle (render sonrası)
+      requestAnimationFrame(() => {
+        const el2 = insideScrollRef.current;
+        if (el2) el2.scrollTop = insideScrollTopRef.current;
+      });
     }
   };
 
-  // ✅ Gate değişince + 10sn polling
+  // Gate değişince + 10sn polling (silent)
   useEffect(() => {
-    fetchInside();
-    const id = setInterval(fetchInside, 10000);
+    fetchInside({ silent: false });
+
+    const id = setInterval(() => {
+      fetchInside({ silent: true });
+    }, 10000);
+
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedGate]);
@@ -202,8 +226,7 @@ const SecurityCheck = () => {
   const handleSelectPerson = async (person) => {
     setSelectedPerson(person);
     setPersonDetail(null);
-    setSearchResults([]); // kişi seçince arama listesini temizle (istersen kaldırabilirsin)
-    // setSearchQuery('');
+    setSearchResults([]); // kişi seçince arama sonuçlarını temizle (istersen kaldırabilirsin)
 
     try {
       const response = await axios.get(`${API}/personnel/${person.id}`);
@@ -221,11 +244,7 @@ const SecurityCheck = () => {
         const my = list
           .filter((x) => {
             const id =
-              x?.personnel_id ||
-              x?.personnelId ||
-              x?.person_id ||
-              x?.personId ||
-              x?.personnel?.id;
+              x?.personnel_id || x?.personnelId || x?.person_id || x?.personId || x?.personnel?.id;
             return String(id || '') === String(pid);
           })
           .sort((a, b) => new Date(getLogTs(b) || 0) - new Date(getLogTs(a) || 0));
@@ -317,8 +336,8 @@ const SecurityCheck = () => {
 
       setIsInside(action === 'IN');
 
-      // ✅ içeridekiler anında güncellensin
-      await fetchInside();
+      // ✅ içeridekileri anında güncelle (manuel gibi, loading göstermeden de olur)
+      await fetchInside({ silent: true });
     } catch (e) {
       console.error('Entry log failed:', e);
       toast.error(
@@ -332,7 +351,10 @@ const SecurityCheck = () => {
   };
 
   const safePersonnel = personDetail?.personnel || {};
-  const safeDocs = Array.isArray(personDetail?.documents) ? personDetail.documents : [];
+  const safeDocs = useMemo(
+    () => (Array.isArray(personDetail?.documents) ? personDetail.documents : []),
+    [personDetail]
+  );
 
   return (
     <div className="space-y-4">
@@ -362,6 +384,7 @@ const SecurityCheck = () => {
               disabled={searching}
               className="px-5 py-2.5 bg-slate-900 dark:bg-slate-200 text-white dark:text-slate-900 rounded-md hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors disabled:opacity-50"
               data-testid="entry-search-button"
+              title="Ara"
             >
               <Search className="w-5 h-5" />
             </button>
@@ -419,48 +442,49 @@ const SecurityCheck = () => {
 
         {/* Right Panel */}
         <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-4 flex flex-col">
-          {/* ✅ İçeride (kart görünüm) */}
+          {/* ✅ İçeride (dashboard başlık + kıpırdamayan yenileme) */}
           <div className="mb-4">
-<div className="flex items-center justify-between mb-3">
-  <div>
-    <div className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-      İçeride <span className="text-slate-500 dark:text-slate-300">({insideList.length})</span>
-    </div>
-    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-      Anlık içeride bulunan personel ve süreleri
-    </div>
-  </div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+                  İçeride{' '}
+                  <span className="text-slate-500 dark:text-slate-300">
+                    ({insideList.length})
+                  </span>
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Anlık içeride bulunan personel ve süreleri
+                </div>
+              </div>
 
-  <button
-    onClick={fetchInside}
-    className="h-10 px-4 rounded-lg bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors text-sm font-semibold shadow-sm"
-  >
-    Yenile
-  </button>
-</div>
+              <button
+                onClick={() => fetchInside({ silent: false })}
+                className="h-10 px-4 rounded-lg bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors text-sm font-semibold shadow-sm"
+              >
+                Yenile
+              </button>
+            </div>
 
-
+            {/* Loading sadece manuel yenilemede göster */}
             {insideLoading ? (
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-500 dark:text-slate-400">
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-600 dark:text-slate-300">
                 Yükleniyor…
               </div>
             ) : insideList.length === 0 ? (
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-500 dark:text-slate-400">
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-600 dark:text-slate-300">
                 İçeride kimse yok.
               </div>
             ) : (
-              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+              <div
+                ref={insideScrollRef}
+                className="space-y-3 max-h-64 overflow-y-auto pr-1"
+              >
                 {insideList.map((x) => {
-                  // nowTick sadece re-render tetiklemek için kullanılıyor
-                  // eslint-disable-next-line no-unused-vars
-                  const _tick = nowTick;
-
                   const start = x.last_ts || Date.now();
                   const durMs = Date.now() - start;
                   const durText = formatDurationTR(durMs);
 
-                  const locationText =
-                    x.gate_label || x.gate || 'Liman Sahası';
+                  const locationText = x.gate_label || x.gate || 'Liman Sahası';
 
                   return (
                     <div
@@ -469,7 +493,7 @@ const SecurityCheck = () => {
                     >
                       {/* Left */}
                       <div className="min-w-0">
-                        <div className="font-bold text-slate-900 dark:text-slate-100 truncate">
+                        <div className="text-base font-extrabold text-slate-900 dark:text-slate-100 truncate">
                           {x.full_name}
                         </div>
 
@@ -487,19 +511,23 @@ const SecurityCheck = () => {
 
                       {/* Right */}
                       <div className="text-right shrink-0 pl-4">
-                        <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center justify-end gap-2">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center justify-end gap-2 tabular-nums">
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-slate-200 dark:border-slate-700">
                             🕒
                           </span>
                           <span>Toplam Süre:</span>
                         </div>
-                        <div className="font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+
+                        {/* sabit genişlik + tabular-nums -> satır kaymaz */}
+                        <div className="font-extrabold text-slate-900 dark:text-slate-100 mt-0.5 tabular-nums w-36 text-right">
                           {durText}
                         </div>
                       </div>
                     </div>
                   );
                 })}
+                {/* nowTick sadece sürelerin akması için re-render tetikler */}
+                <span className="hidden">{nowTick}</span>
               </div>
             )}
           </div>
@@ -682,7 +710,7 @@ const SecurityCheck = () => {
                 )}
               </div>
 
-              {/* küçük not: user kullanımı kalsın (ileride göstermek istersen) */}
+              {/* küçük not */}
               {/* <div className="text-xs text-slate-400">Logged in: {user?.full_name}</div> */}
             </div>
           )}
