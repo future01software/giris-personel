@@ -18,6 +18,26 @@ const GATES = [
   { value: 'OFFDOCK2_KOMURLER', label: 'Offdock2 Sahası (Kömürler)' },
 ];
 
+const formatDurationTR = (ms) => {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
+  const secs = totalSec % 60;
+
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  // Örnekler:
+  // 22s 04dk 12sn
+  // 4s 54dk 14sn
+  // 28dk 06sn
+  // 12sn
+  if (days > 0) return `${days}g ${pad2(hours)}s ${pad2(mins)}dk ${pad2(secs)}sn`;
+  if (hours > 0) return `${hours}s ${pad2(mins)}dk ${pad2(secs)}sn`;
+  if (mins > 0) return `${mins}dk ${pad2(secs)}sn`;
+  return `${secs}sn`;
+};
+
 const SecurityCheck = () => {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
@@ -31,9 +51,12 @@ const SecurityCheck = () => {
   const [entryLoading, setEntryLoading] = useState(false);
   const [isInside, setIsInside] = useState(false);
 
-  // ✅ İçeridekiler
+  // ✅ İçeridekiler listesi
   const [insideList, setInsideList] = useState([]);
   const [insideLoading, setInsideLoading] = useState(false);
+
+  // ✅ anlık süre için tick
+  const [nowTick, setNowTick] = useState(Date.now());
 
   const [selectedGate, setSelectedGate] = useState(
     () => localStorage.getItem(GATE_KEY) || 'PORT_FACILITY'
@@ -42,6 +65,11 @@ const SecurityCheck = () => {
   useEffect(() => {
     localStorage.setItem(GATE_KEY, selectedGate);
   }, [selectedGate]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -106,7 +134,7 @@ const SecurityCheck = () => {
       if (!pid) continue;
 
       const g = getLogGate(x);
-      // gate filtresi: loglarda gate alanı varsa uygula; yoksa liste genel olur
+      // Gate filtresi: loglarda gate alanı varsa uygula; yoksa genel listeler
       if (gate && g && String(g) !== String(gate)) continue;
 
       const ts = new Date(getLogTs(x) || 0).getTime();
@@ -128,11 +156,16 @@ const SecurityCheck = () => {
         `${p?.first_name || ''} ${p?.last_name || ''}`.trim() ||
         `ID: ${pid}`;
 
+      const g = getLogGate(v.log) || '';
+      const gateLabel = GATES.find((z) => z.value === g)?.label || '';
+
       items.push({
         personnel_id: pid,
         full_name: fullName,
         company: v.log?.company || p?.company || '',
         last_ts: v.ts,
+        gate: g,
+        gate_label: gateLabel,
       });
     }
 
@@ -168,15 +201,15 @@ const SecurityCheck = () => {
 
   const handleSelectPerson = async (person) => {
     setSelectedPerson(person);
-    setPersonDetail(null);      // sağ panel "yükleniyor" hissi
-    setSearchResults([]);       // kişi seçince arama listesini temizle (istersen kaldırabilirsin)
-    // setSearchQuery('');      // istersen arama kutusunu da temizle
+    setPersonDetail(null);
+    setSearchResults([]); // kişi seçince arama listesini temizle (istersen kaldırabilirsin)
+    // setSearchQuery('');
 
     try {
       const response = await axios.get(`${API}/personnel/${person.id}`);
       setPersonDetail(response.data);
 
-      // Seçilen kişinin içeride mi kontrolü
+      // seçilen kişinin içeride mi kontrolü
       try {
         const logsRes = await axios.get(`${API}/entry/logs?limit=2000`);
         const list = Array.isArray(logsRes.data)
@@ -284,7 +317,7 @@ const SecurityCheck = () => {
 
       setIsInside(action === 'IN');
 
-      // ✅ içeridekileri anında güncelle
+      // ✅ içeridekiler anında güncellensin
       await fetchInside();
     } catch (e) {
       console.error('Entry log failed:', e);
@@ -384,14 +417,15 @@ const SecurityCheck = () => {
           </div>
         </div>
 
-        {/* Right Panel - Status Display */}
+        {/* Right Panel */}
         <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-4 flex flex-col">
-          {/* ✅ Inside Now */}
-          <div className="mb-4 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
-            <div className="flex items-center justify-between">
+          {/* ✅ İçeride (kart görünüm) */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
               <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 İçeride ({insideList.length})
               </div>
+
               <button
                 onClick={fetchInside}
                 className="text-xs px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800"
@@ -401,47 +435,70 @@ const SecurityCheck = () => {
             </div>
 
             {insideLoading ? (
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-500 dark:text-slate-400">
                 Yükleniyor…
               </div>
             ) : insideList.length === 0 ? (
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-500 dark:text-slate-400">
                 İçeride kimse yok.
               </div>
             ) : (
-              <div className="mt-2 max-h-40 overflow-y-auto space-y-2">
-                {insideList.slice(0, 30).map((x) => (
-                  <div
-                    key={x.personnel_id}
-                    className="flex items-center justify-between text-xs"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-medium text-slate-900 dark:text-slate-100 truncate">
-                        {x.full_name}
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                {insideList.map((x) => {
+                  // nowTick sadece re-render tetiklemek için kullanılıyor
+                  // eslint-disable-next-line no-unused-vars
+                  const _tick = nowTick;
+
+                  const start = x.last_ts || Date.now();
+                  const durMs = Date.now() - start;
+                  const durText = formatDurationTR(durMs);
+
+                  const locationText =
+                    x.gate_label || x.gate || 'Liman Sahası';
+
+                  return (
+                    <div
+                      key={x.personnel_id}
+                      className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm px-4 py-3 flex items-center justify-between"
+                    >
+                      {/* Left */}
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {x.full_name}
+                        </div>
+
+                        <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-1">
+                          <span className="inline-flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+                            GÜVENLİK
+                          </span>
+
+                          <span className="text-slate-300 dark:text-slate-700">|</span>
+
+                          <span className="truncate">{locationText}</span>
+                        </div>
                       </div>
-                      <div className="text-slate-500 dark:text-slate-400 truncate">
-                        {x.company || '-'}
+
+                      {/* Right */}
+                      <div className="text-right shrink-0 pl-4">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center justify-end gap-2">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-slate-200 dark:border-slate-700">
+                            🕒
+                          </span>
+                          <span>Toplam Süre:</span>
+                        </div>
+                        <div className="font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                          {durText}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-slate-500 dark:text-slate-400 whitespace-nowrap ml-2">
-                      {x.last_ts
-                        ? new Date(x.last_ts).toLocaleTimeString('tr-TR', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : ''}
-                    </div>
-                  </div>
-                ))}
-                {insideList.length > 30 && (
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 pt-1">
-                    +{insideList.length - 30} kişi daha…
-                  </div>
-                )}
+                  );
+                })}
               </div>
             )}
           </div>
 
+          {/* Seçili personel yoksa */}
           {!personDetail ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500">
               <User className="w-12 h-12 mb-3 opacity-50" />
@@ -618,11 +675,11 @@ const SecurityCheck = () => {
                   </div>
                 )}
               </div>
+
+              {/* küçük not: user kullanımı kalsın (ileride göstermek istersen) */}
+              {/* <div className="text-xs text-slate-400">Logged in: {user?.full_name}</div> */}
             </div>
           )}
-
-          {/* küçük not: user kullanımı kalsın (ileride göstermek istersen) */}
-          {/* <div className="text-xs text-slate-400">Logged in: {user?.full_name}</div> */}
         </div>
       </div>
     </div>
