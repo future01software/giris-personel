@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { Search, User, DoorOpen, DoorClosed } from 'lucide-react';
-// import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -32,6 +31,10 @@ const SecurityCheck = () => {
   const [entryLoading, setEntryLoading] = useState(false);
   const [isInside, setIsInside] = useState(false);
 
+  // ✅ İçeridekiler
+  const [insideList, setInsideList] = useState([]);
+  const [insideLoading, setInsideLoading] = useState(false);
+
   const [selectedGate, setSelectedGate] = useState(
     () => localStorage.getItem(GATE_KEY) || 'PORT_FACILITY'
   );
@@ -44,9 +47,11 @@ const SecurityCheck = () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
     try {
-      const response = await axios.get(`${API}/personnel/search?q=${encodeURIComponent(searchQuery)}`);
-      setSearchResults(response.data);
-      if (response.data.length === 0) toast.info(t('noResults'));
+      const response = await axios.get(
+        `${API}/personnel/search?q=${encodeURIComponent(searchQuery)}`
+      );
+      setSearchResults(Array.isArray(response.data) ? response.data : []);
+      if ((response.data || []).length === 0) toast.info(t('noResults'));
     } catch (error) {
       console.error('Search failed:', error);
       toast.error(t('searchFailed') || 'Search failed');
@@ -61,8 +66,10 @@ const SecurityCheck = () => {
 
     if (v === 'in' || v === 'entry' || v === 'enter' || v === 'entered') return 'in';
     if (v === 'out' || v === 'exit' || v === 'exited') return 'out';
-    if (v === 'approved' || v === 'allow' || v === 'allowed' || v === 'accepted' || v === 'ok') return 'in';
-    if (v === 'rejected' || v === 'deny' || v === 'denied' || v === 'not_ok' || v === 'no') return 'out';
+    if (v === 'approved' || v === 'allow' || v === 'allowed' || v === 'accepted' || v === 'ok')
+      return 'in';
+    if (v === 'rejected' || v === 'deny' || v === 'denied' || v === 'not_ok' || v === 'no')
+      return 'out';
 
     return '';
   };
@@ -75,17 +82,106 @@ const SecurityCheck = () => {
     x?.exit_time ||
     '';
 
+  const getLogGate = (x) =>
+    x?.gate || x?.gate_key || x?.gateKey || x?.location_gate || '';
+
+  const normalizeDecision = (x) => {
+    const v = normalizeAction(x);
+    if (v === 'in') return 'IN';
+    if (v === 'out') return 'OUT';
+    return '';
+  };
+
+  const computeInsideFromLogs = (logs, gate) => {
+    const latestByPid = new Map();
+
+    for (const x of logs || []) {
+      const pid =
+        x?.personnel_id ||
+        x?.personnelId ||
+        x?.person_id ||
+        x?.personId ||
+        x?.personnel?.id;
+
+      if (!pid) continue;
+
+      const g = getLogGate(x);
+      // gate filtresi: loglarda gate alanı varsa uygula; yoksa liste genel olur
+      if (gate && g && String(g) !== String(gate)) continue;
+
+      const ts = new Date(getLogTs(x) || 0).getTime();
+      const prev = latestByPid.get(String(pid));
+      if (!prev || ts > prev.ts) {
+        latestByPid.set(String(pid), { ts, log: x });
+      }
+    }
+
+    const items = [];
+    for (const [pid, v] of latestByPid.entries()) {
+      const dec = normalizeDecision(v.log);
+      if (dec !== 'IN') continue;
+
+      const p = v.log?.personnel || v.log?.person || {};
+      const fullName =
+        v.log?.full_name ||
+        p?.full_name ||
+        `${p?.first_name || ''} ${p?.last_name || ''}`.trim() ||
+        `ID: ${pid}`;
+
+      items.push({
+        personnel_id: pid,
+        full_name: fullName,
+        company: v.log?.company || p?.company || '',
+        last_ts: v.ts,
+      });
+    }
+
+    items.sort((a, b) => (b.last_ts || 0) - (a.last_ts || 0));
+    return items;
+  };
+
+  const fetchInside = async () => {
+    setInsideLoading(true);
+    try {
+      const logsRes = await axios.get(`${API}/entry/logs?limit=1000`);
+      const list = Array.isArray(logsRes.data)
+        ? logsRes.data
+        : logsRes.data?.data || logsRes.data?.items || [];
+
+      const inside = computeInsideFromLogs(list, selectedGate);
+      setInsideList(inside);
+    } catch (e) {
+      console.error('Failed to fetch inside list', e);
+      setInsideList([]);
+    } finally {
+      setInsideLoading(false);
+    }
+  };
+
+  // ✅ Gate değişince + 10sn polling
+  useEffect(() => {
+    fetchInside();
+    const id = setInterval(fetchInside, 10000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGate]);
+
   const handleSelectPerson = async (person) => {
     setSelectedPerson(person);
+    setPersonDetail(null);      // sağ panel "yükleniyor" hissi
+    setSearchResults([]);       // kişi seçince arama listesini temizle (istersen kaldırabilirsin)
+    // setSearchQuery('');      // istersen arama kutusunu da temizle
+
     try {
       const response = await axios.get(`${API}/personnel/${person.id}`);
       setPersonDetail(response.data);
 
+      // Seçilen kişinin içeride mi kontrolü
       try {
-        const logsRes = await axios.get(`${API}/entry/logs?limit=200`);
+        const logsRes = await axios.get(`${API}/entry/logs?limit=2000`);
         const list = Array.isArray(logsRes.data)
           ? logsRes.data
-          : (logsRes.data?.data || logsRes.data?.items || []);
+          : logsRes.data?.data || logsRes.data?.items || [];
 
         const pid = person.id;
 
@@ -118,13 +214,15 @@ const SecurityCheck = () => {
 
   const getStatusMessage = () => {
     if (!personDetail) return '';
-    if (personDetail.assignment_expired) return t('assignmentExpired') || 'Görev süresi dolmuş - GİRİŞ YASAK';
-    if (personDetail.overall_status === 'red') return t('documentsExpired') || 'Evrakları eksik/süresi geçmiş - GİRİŞ YASAK';
-    if (personDetail.overall_status === 'yellow') return t('documentsWarning') || 'Evraklar yakında süre dolacak - UYARI';
+    if (personDetail.assignment_expired)
+      return t('assignmentExpired') || 'Görev süresi dolmuş - GİRİŞ YASAK';
+    if (personDetail.overall_status === 'red')
+      return t('documentsExpired') || 'Evrakları eksik/süresi geçmiş - GİRİŞ YASAK';
+    if (personDetail.overall_status === 'yellow')
+      return t('documentsWarning') || 'Evraklar yakında süre dolacak - UYARI';
     return t('allDocumentsValid') || 'Tüm evraklar geçerli - GİRİŞ İZNİ VAR';
   };
 
-  // ✅ green + yellow giriş alabilir, red alamaz; içerideyse tekrar giriş yok
   const canEnter = () => {
     if (!personDetail) return false;
     if (personDetail.assignment_expired) return false;
@@ -134,7 +232,6 @@ const SecurityCheck = () => {
     return s === 'green' || s === 'yellow';
   };
 
-  // ✅ çıkış: içeride olmalı; evrak red ise çıkışa da izin verme (senin istediğin kurala göre)
   const canExit = () => {
     if (!personDetail) return false;
     if (personDetail.assignment_expired) return false;
@@ -154,11 +251,10 @@ const SecurityCheck = () => {
       return;
     }
 
-    // ✅ Kontrolleri action’a göre ayır
     if (action === 'IN' && !canEnter()) {
       toast.error(
         t('noEntryPermission') ||
-        'Bu personelin giriş izni yok. (Eksik/süresi geçmiş evrak veya görev süresi dolmuş olabilir.)'
+          'Bu personelin giriş izni yok. (Eksik/süresi geçmiş evrak veya görev süresi dolmuş olabilir.)'
       );
       return;
     }
@@ -166,7 +262,7 @@ const SecurityCheck = () => {
     if (action === 'OUT' && !canExit()) {
       toast.error(
         t('cannotExit') ||
-        'Çıkış verilemez. Personel içeride değil ya da evrak/görev durumu uygun değil.'
+          'Çıkış verilemez. Personel içeride değil ya da evrak/görev durumu uygun değil.'
       );
       return;
     }
@@ -180,18 +276,32 @@ const SecurityCheck = () => {
         gate: selectedGate,
       });
 
-      toast.success(action === 'IN' ? (t('entrySaved') || 'Giriş kaydedildi') : (t('exitSaved') || 'Çıkış kaydedildi'));
+      toast.success(
+        action === 'IN'
+          ? t('entrySaved') || 'Giriş kaydedildi'
+          : t('exitSaved') || 'Çıkış kaydedildi'
+      );
+
       setIsInside(action === 'IN');
+
+      // ✅ içeridekileri anında güncelle
+      await fetchInside();
     } catch (e) {
       console.error('Entry log failed:', e);
-      toast.error(e?.response?.data?.detail || e?.response?.data?.message || (t('operationFailed') || 'İşlem başarısız'));
+      toast.error(
+        e?.response?.data?.detail ||
+          e?.response?.data?.message ||
+          (t('operationFailed') || 'İşlem başarısız')
+      );
     } finally {
       setEntryLoading(false);
     }
   };
 
+  const safePersonnel = personDetail?.personnel || {};
+  const safeDocs = Array.isArray(personDetail?.documents) ? personDetail.documents : [];
+
   return (
-    //    <Layout>
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight mb-2">
@@ -236,10 +346,11 @@ const SecurityCheck = () => {
                   <div
                     key={person.id}
                     onClick={() => handleSelectPerson(person)}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedPerson?.id === person.id
-                      ? 'border-slate-900 dark:border-slate-200 bg-slate-50 dark:bg-slate-700'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                      }`}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      selectedPerson?.id === person.id
+                        ? 'border-slate-900 dark:border-slate-200 bg-slate-50 dark:bg-slate-700'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                    }`}
                     data-testid={`search-result-${person.id}`}
                   >
                     <div className="flex items-center gap-3">
@@ -275,6 +386,62 @@ const SecurityCheck = () => {
 
         {/* Right Panel - Status Display */}
         <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-4 flex flex-col">
+          {/* ✅ Inside Now */}
+          <div className="mb-4 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                İçeride ({insideList.length})
+              </div>
+              <button
+                onClick={fetchInside}
+                className="text-xs px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800"
+              >
+                Yenile
+              </button>
+            </div>
+
+            {insideLoading ? (
+              <div className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                Yükleniyor…
+              </div>
+            ) : insideList.length === 0 ? (
+              <div className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                İçeride kimse yok.
+              </div>
+            ) : (
+              <div className="mt-2 max-h-40 overflow-y-auto space-y-2">
+                {insideList.slice(0, 30).map((x) => (
+                  <div
+                    key={x.personnel_id}
+                    className="flex items-center justify-between text-xs"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-900 dark:text-slate-100 truncate">
+                        {x.full_name}
+                      </div>
+                      <div className="text-slate-500 dark:text-slate-400 truncate">
+                        {x.company || '-'}
+                      </div>
+                    </div>
+                    <div className="text-slate-500 dark:text-slate-400 whitespace-nowrap ml-2">
+                      {x.last_ts
+                        ? new Date(x.last_ts).toLocaleTimeString('tr-TR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
+                    </div>
+                  </div>
+                ))}
+                {insideList.length > 30 && (
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 pt-1">
+                    +{insideList.length - 30} kişi daha…
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {!personDetail ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500">
               <User className="w-12 h-12 mb-3 opacity-50" />
@@ -285,10 +452,10 @@ const SecurityCheck = () => {
               {/* Personnel Info */}
               <div className="pb-4 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-3 mb-3">
-                  {personDetail.personnel.photo_url ? (
+                  {safePersonnel.photo_url ? (
                     <img
-                      src={personDetail.personnel.photo_url}
-                      alt={personDetail.personnel.full_name}
+                      src={safePersonnel.photo_url}
+                      alt={safePersonnel.full_name}
                       className="w-16 h-16 rounded-md object-cover border border-slate-200 dark:border-slate-600"
                     />
                   ) : (
@@ -299,13 +466,13 @@ const SecurityCheck = () => {
 
                   <div className="flex-1 min-w-0">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
-                      {personDetail.personnel.full_name}
+                      {safePersonnel.full_name || '-'}
                     </h2>
                     <p className="text-sm text-slate-600 dark:text-slate-300 truncate">
-                      {personDetail.personnel.company}
+                      {safePersonnel.company || '-'}
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {personDetail.personnel.tc_number}
+                      {safePersonnel.tc_number || ''}
                     </p>
                   </div>
                 </div>
@@ -333,10 +500,11 @@ const SecurityCheck = () => {
                   <button
                     onClick={() => submitEntry('IN')}
                     disabled={entryLoading || !canEnter()}
-                    className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium uppercase tracking-wide transition-colors flex items-center justify-center gap-2 ${canEnter()
-                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                      : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400 cursor-not-allowed'
-                      }`}
+                    className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium uppercase tracking-wide transition-colors flex items-center justify-center gap-2 ${
+                      canEnter()
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                        : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400 cursor-not-allowed'
+                    }`}
                     title={canEnter() ? 'Giriş ver' : isInside ? 'Personel içeride' : 'Giriş izni yok'}
                   >
                     <DoorOpen className="w-4 h-4" />
@@ -346,10 +514,11 @@ const SecurityCheck = () => {
                   <button
                     onClick={() => submitEntry('OUT')}
                     disabled={entryLoading || !canExit()}
-                    className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium uppercase tracking-wide transition-colors flex items-center justify-center gap-2 ${canExit()
-                      ? 'bg-red-600 hover:bg-red-500 text-white'
-                      : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400 cursor-not-allowed'
-                      }`}
+                    className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium uppercase tracking-wide transition-colors flex items-center justify-center gap-2 ${
+                      canExit()
+                        ? 'bg-red-600 hover:bg-red-500 text-white'
+                        : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400 cursor-not-allowed'
+                    }`}
                     title={canExit() ? 'Çıkış ver' : !isInside ? 'Personel içeride değil' : 'Evrak/Görev uygun değil'}
                   >
                     <DoorClosed className="w-4 h-4" />
@@ -358,17 +527,17 @@ const SecurityCheck = () => {
                 </div>
 
                 {/* Assignment Dates */}
-                {(personDetail.personnel.assignment_start || personDetail.personnel.assignment_end) && (
+                {(safePersonnel.assignment_start || safePersonnel.assignment_end) && (
                   <div className="mt-3 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-700">
                     <p className="text-xs uppercase tracking-wider font-medium text-slate-600 dark:text-slate-300 mb-0.5">
                       Görev Süresi
                     </p>
                     <p className="text-sm text-slate-900 dark:text-slate-100">
-                      {personDetail.personnel.assignment_start &&
-                        new Date(personDetail.personnel.assignment_start).toLocaleDateString('tr-TR')}
+                      {safePersonnel.assignment_start &&
+                        new Date(safePersonnel.assignment_start).toLocaleDateString('tr-TR')}
                       {' - '}
-                      {personDetail.personnel.assignment_end &&
-                        new Date(personDetail.personnel.assignment_end).toLocaleDateString('tr-TR')}
+                      {safePersonnel.assignment_end &&
+                        new Date(safePersonnel.assignment_end).toLocaleDateString('tr-TR')}
                     </p>
                   </div>
                 )}
@@ -379,20 +548,22 @@ const SecurityCheck = () => {
                 <StatusBadge status={personDetail.overall_status} size="lg" />
 
                 <div
-                  className={`mt-4 text-center p-4 rounded-lg border-2 w-full ${personDetail.overall_status === 'red'
-                    ? 'bg-red-50 border-red-300 dark:bg-red-950/40 dark:border-red-900'
-                    : personDetail.overall_status === 'yellow'
+                  className={`mt-4 text-center p-4 rounded-lg border-2 w-full ${
+                    personDetail.overall_status === 'red'
+                      ? 'bg-red-50 border-red-300 dark:bg-red-950/40 dark:border-red-900'
+                      : personDetail.overall_status === 'yellow'
                       ? 'bg-amber-50 border-amber-300 dark:bg-amber-950/40 dark:border-amber-900'
                       : 'bg-emerald-50 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-900'
-                    }`}
+                  }`}
                 >
                   <p
-                    className={`text-base font-bold uppercase ${personDetail.overall_status === 'red'
-                      ? 'text-red-800 dark:text-red-200'
-                      : personDetail.overall_status === 'yellow'
+                    className={`text-base font-bold uppercase ${
+                      personDetail.overall_status === 'red'
+                        ? 'text-red-800 dark:text-red-200'
+                        : personDetail.overall_status === 'yellow'
                         ? 'text-amber-800 dark:text-amber-200'
                         : 'text-emerald-800 dark:text-emerald-200'
-                      }`}
+                    }`}
                   >
                     {getStatusMessage()}
                   </p>
@@ -405,13 +576,13 @@ const SecurityCheck = () => {
                   {t('documents')}
                 </h3>
 
-                {personDetail.documents.length === 0 ? (
+                {safeDocs.length === 0 ? (
                   <p className="text-slate-500 dark:text-slate-400 text-center py-4 text-sm">
                     {t('noDocuments')}
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {personDetail.documents.map((doc) => (
+                    {safeDocs.map((doc) => (
                       <div
                         key={doc.id}
                         className="p-2.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
@@ -421,24 +592,26 @@ const SecurityCheck = () => {
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-xs text-slate-900 dark:text-slate-100 truncate">
                               {i18n.language === 'tr'
-                                ? doc.document_type.name_tr
-                                : doc.document_type.name_en}
+                                ? doc?.document_type?.name_tr
+                                : doc?.document_type?.name_en}
                             </p>
                             <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                              {new Date(doc.expiry_date).toLocaleDateString('tr-TR')}
-                              {doc.days_until_expiry >= 0 && (
+                              {doc?.expiry_date
+                                ? new Date(doc.expiry_date).toLocaleDateString('tr-TR')
+                                : '-'}
+                              {typeof doc?.days_until_expiry === 'number' && doc.days_until_expiry >= 0 && (
                                 <span className="ml-1.5 text-slate-500 dark:text-slate-400">
                                   ({doc.days_until_expiry} gün)
                                 </span>
                               )}
-                              {doc.days_until_expiry < 0 && (
+                              {typeof doc?.days_until_expiry === 'number' && doc.days_until_expiry < 0 && (
                                 <span className="ml-1.5 text-red-600 dark:text-red-400 font-medium">
                                   (Süresi geçmiş)
                                 </span>
                               )}
                             </p>
                           </div>
-                          <StatusBadge status={doc.status} size="sm" />
+                          <StatusBadge status={doc?.status} size="sm" />
                         </div>
                       </div>
                     ))}
@@ -447,13 +620,12 @@ const SecurityCheck = () => {
               </div>
             </div>
           )}
+
+          {/* küçük not: user kullanımı kalsın (ileride göstermek istersen) */}
+          {/* <div className="text-xs text-slate-400">Logged in: {user?.full_name}</div> */}
         </div>
       </div>
-
-      {/* küçük not: user kullanımı kalsın (ileride göstermek istersen) */}
-      {/* <div className="text-xs text-slate-400">Logged in: {user?.full_name}</div> */}
     </div>
-    //    </Layout>
   );
 };
 
