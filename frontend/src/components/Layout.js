@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useAlerts } from '../contexts/AlertContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 import {
   ShieldCheck,
@@ -29,14 +30,7 @@ import { toTurkishUpperCase } from '../utils/textHelpers';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
-const THEME_KEY = 'CLEAR2WORK_THEME';
 const LANG_KEY = 'CLEAR2WORK_LANG';
-
-const getInitialTheme = () => {
-  const saved = localStorage.getItem(THEME_KEY);
-  if (saved === 'dark' || saved === 'light') return saved;
-  return 'light';
-};
 
 // ✅ Role normalize
 const normalizeRoleKey = (role) => {
@@ -54,7 +48,7 @@ const Layout = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [theme, setTheme] = useState(getInitialTheme);
+  const { isDark, setTheme, toggleTheme } = useTheme();
   // Sidebar state - Default to TRUE (open)
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -72,22 +66,13 @@ const Layout = ({ children }) => {
   }, [sidebarOpen]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const dark = theme === 'dark';
+  const dark = isDark;
   const isTR = i18n.language?.startsWith('tr');
 
   const upper = (text) => {
     const s = String(text || '');
     return isTR ? toTurkishUpperCase(s) : s.toUpperCase();
   };
-
-  // ✅ Tema uygula
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle('dark', dark);
-    localStorage.setItem(THEME_KEY, theme);
-  }, [dark, theme]);
-
-  const toggleTheme = () => setTheme((p) => (p === 'dark' ? 'light' : 'dark'));
 
   // ✅ Dil: açılışta localStorage'dan uygula
   useEffect(() => {
@@ -105,7 +90,7 @@ const Layout = ({ children }) => {
 
   const handleLogout = () => {
     logout();
-    localStorage.removeItem(THEME_KEY);
+    localStorage.removeItem('clear2work_theme');
     document.documentElement.classList.remove('dark');
     setTheme('light');
     navigate('/login');
