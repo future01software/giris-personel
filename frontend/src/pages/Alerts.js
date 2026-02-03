@@ -1,3 +1,4 @@
+// src/pages/Alerts.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -6,32 +7,49 @@ import { AlertTriangle, Calendar, ArrowLeft, Search } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const Alerts = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+
   const [alerts, setAlerts] = useState([]);
   const [filteredAlerts, setFilteredAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // ✅ Varsayılan 14 gün
   const [days, setDays] = useState(14);
-
   const [searchTerm, setSearchTerm] = useState('');
 
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API}/alerts/expiring-documents?days=${days}`);
+      // AuthContext yapına göre olası token alanları
+      const token =
+        user?.access_token ||
+        user?.token ||
+        user?.jwt ||
+        user?.data?.access_token ||
+        user?.data?.token;
+
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const response = await axios.get(
+        `${API}/alerts/expiring-documents?days=${days}`,
+        { headers }
+      );
+
       setAlerts(response.data.alerts || []);
     } catch (error) {
       console.error('Failed to fetch alerts:', error);
+      setAlerts([]);
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, user]);
 
   useEffect(() => {
     fetchAlerts();
@@ -43,10 +61,11 @@ const Alerts = () => {
     // Search filter
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      result = result.filter((alert) =>
-        alert.full_name?.toLowerCase().includes(term) ||
-        alert.company?.toLowerCase().includes(term) ||
-        alert.phone?.toLowerCase().includes(term)
+      result = result.filter(
+        (alert) =>
+          alert.full_name?.toLowerCase().includes(term) ||
+          alert.company?.toLowerCase().includes(term) ||
+          alert.phone?.toLowerCase().includes(term)
       );
     }
 
@@ -71,7 +90,9 @@ const Alerts = () => {
     return (
       //      <Layout>
       <div className="flex items-center justify-center h-64">
-        <div className="text-lg text-slate-600 dark:text-slate-300">{t('loading')}</div>
+        <div className="text-lg text-slate-600 dark:text-slate-300">
+          {t('loading')}
+        </div>
       </div>
       //      </Layout>
     );
@@ -102,7 +123,9 @@ const Alerts = () => {
 
         {/* Days Filter */}
         <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-600 dark:text-slate-300">{t('timeFilter')}:</span>
+          <span className="text-sm text-slate-600 dark:text-slate-300">
+            {t('timeFilter')}:
+          </span>
           <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
@@ -151,7 +174,8 @@ const Alerts = () => {
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
           <p className="text-sm text-slate-600 dark:text-slate-300">
             <AlertTriangle className="w-4 h-4 inline mr-2 text-amber-600 dark:text-amber-300" />
-            {t('totalRecords')} {filteredAlerts.length} {t('records')} • {t('showingExpiringFirst')}
+            {t('totalRecords')} {filteredAlerts.length} {t('records')} •{' '}
+            {t('showingExpiringFirst')}
           </p>
         </div>
 
@@ -164,15 +188,22 @@ const Alerts = () => {
             filteredAlerts.map((alert) => (
               <div
                 key={alert.personnel_id}
-                className={`flex items-center justify-between p-4 transition-colors cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 ${alert.most_urgent_days < 0 ? 'bg-red-50/50 dark:bg-rose-950/30' : ''
-                  }`}
+                className={`flex items-center justify-between p-4 transition-colors cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 ${
+                  alert.most_urgent_days < 0
+                    ? 'bg-red-50/50 dark:bg-rose-950/30'
+                    : ''
+                }`}
                 onClick={() => navigate(`/personnel/${alert.personnel_id}`)}
                 data-testid={`alert-row-${alert.personnel_id}`}
               >
                 {/* Left */}
                 <div className="flex-1">
-                  <p className="font-medium text-slate-900 dark:text-slate-100">{alert.full_name}</p>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">{alert.company}</p>
+                  <p className="font-medium text-slate-900 dark:text-slate-100">
+                    {alert.full_name}
+                  </p>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    {alert.company}
+                  </p>
                   {alert.phone && (
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                       Tel: {alert.phone}
@@ -208,10 +239,11 @@ const Alerts = () => {
                   </div>
 
                   <Calendar
-                    className={`w-6 h-6 ${alert.most_urgent_days < 0
+                    className={`w-6 h-6 ${
+                      alert.most_urgent_days < 0
                         ? 'text-red-500 dark:text-rose-300'
                         : 'text-amber-500 dark:text-amber-300'
-                      }`}
+                    }`}
                   />
                 </div>
               </div>
