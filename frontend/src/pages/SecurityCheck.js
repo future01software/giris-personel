@@ -12,6 +12,12 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const GATE_KEY = 'GK_SELECTED_GATE';
 
+const GATES = [
+  { value: 'ADMIN_BUILDING', label: 'İdari Bina' },
+  { value: 'PORT_FACILITY', label: 'Liman Tesisi' },
+  { value: 'OFFDOCK1_SAYINLAR', label: 'Offdock1 Sahası (Sayınlar)' },
+  { value: 'OFFDOCK2_KOMURLER', label: 'Offdock2 Sahası (Kömürler)' },
+];
 
 const SecurityCheck = () => {
   const { t, i18n } = useTranslation();
