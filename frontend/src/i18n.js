@@ -6,7 +6,7 @@ const STORAGE_LANG_KEY = 'CLEAR2WORK_LANG';
 const getInitialLang = () => {
       const saved = localStorage.getItem(STORAGE_LANG_KEY);
       if (saved === 'tr' || saved === 'en') return saved;
-      return 'en'; // Default to English
+      return 'tr'; // Default to Turkish
 };
 
 const resources = {
