@@ -4,7 +4,7 @@ import io
 from datetime import datetime, timezone, timedelta
 
 from app.models import PersonnelCreate, BulkDeleteRequest
-from app.db import db
+from app.db import db, DEMO_MODE
 from app.deps import get_current_user, require_role
 from app.utils import new_id, compute_can_enter_map, prepare_turkish_search
 
