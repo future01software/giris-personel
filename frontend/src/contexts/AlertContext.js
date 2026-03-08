@@ -4,7 +4,7 @@ import { useAuth } from './AuthContext';
 
 const AlertContext = createContext();
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const API = `${process.env.REACT_APP_BACKEND_URL || 'http://' + window.location.hostname + ':8000'}/api`;
 const CACHE_KEY = 'CLEAR2WORK_ALERTS_CACHE';
 const ALERT_DAYS = 30;
 
@@ -29,7 +29,9 @@ export const AlertProvider = ({ children }) => {
     const fetchAlerts = useCallback(async () => {
         if (!token) return; // Wait for token
         try {
-            const response = await axios.get(`${API}/alerts/expiring-documents?days=${ALERT_DAYS}`);
+            const response = await axios.get(`${API}/alerts/expiring-documents?days=${ALERT_DAYS}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             const rawAlerts = response?.data?.alerts || [];
 
             // Strict Filter: Only show people who are VALID now but have UPCOMING expiry.
