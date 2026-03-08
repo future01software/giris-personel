@@ -79,31 +79,31 @@ const Landing = () => {
             </div>
 
             {/* Navigation */}
-            <nav className="relative z-50 w-full px-8 md:px-12 h-28 flex items-center justify-between">
-                <div className="flex items-center gap-4 group cursor-pointer" onClick={() => navigate('/')}>
-                    <img src="/logo.png" alt="" className="w-10 h-10 object-contain filter drop-shadow-xl dark:brightness-0 dark:invert dark:drop-shadow-[0_0_15px_rgba(255,255,255,0.1)] transition-transform duration-500 group-hover:scale-105" />
-                    <span className="text-2xl font-['Pacifico',_cursive] text-slate-800 dark:text-white transition-colors">
+            <nav className="relative z-50 w-full px-4 sm:px-8 md:px-12 h-20 sm:h-28 flex items-center justify-between">
+                <div className="flex items-center gap-2 sm:gap-4 group cursor-pointer" onClick={() => navigate('/')}>
+                    <img src="/logo.png" alt="" className="w-8 h-8 sm:w-10 sm:h-10 object-contain filter drop-shadow-xl dark:brightness-0 dark:invert dark:drop-shadow-[0_0_15px_rgba(255,255,255,0.1)] transition-transform duration-500 group-hover:scale-105" />
+                    <span className="hidden sm:inline text-2xl font-['Pacifico',_cursive] text-slate-800 dark:text-white transition-colors">
                         Clear<span className="text-slate-500 dark:text-slate-400 ml-1 transition-colors">2Work</span>
                     </span>
                 </div>
 
-                <div className="flex items-center gap-2 sm:gap-4">
+                <div className="flex items-center gap-1.5 sm:gap-4">
                     {/* Language & Theme Toggles integrated into Nav */}
-                    <div className="flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-2">
-                        <button onClick={toggleLanguage} className="h-8 w-[52px] rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 flex items-center justify-center gap-1.5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all">
+                    <div className="flex items-center gap-1 sm:gap-2 mr-0.5 sm:mr-2">
+                        <button onClick={toggleLanguage} className="h-7 sm:h-8 w-[44px] sm:w-[52px] rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 flex items-center justify-center gap-1 sm:gap-1.5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all">
                             <Languages className="w-3 h-3 dark:text-slate-400" />
                             <span className="font-bold text-[9px] uppercase dark:text-white/80">{i18n.language}</span>
                         </button>
-                        <button onClick={toggleTheme} className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 transition-all">
+                        <button onClick={toggleTheme} className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 transition-all">
                             {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-slate-400" /> : <Moon className="w-3.5 h-3.5 text-slate-800" />}
                         </button>
                     </div>
 
-                    <div className="flex items-center gap-2 sm:gap-3">
-                        <Button variant="ghost" className="text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg w-[85px] sm:w-[110px] text-xs sm:text-sm transition-all" onClick={() => navigate('/login')}>
+                    <div className="flex items-center gap-1.5 sm:gap-3">
+                        <Button variant="ghost" className="text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg w-auto px-2 sm:px-4 sm:w-[110px] text-[11px] sm:text-sm transition-all" onClick={() => navigate('/login')}>
                             {t('login')}
                         </Button>
-                        <Button className="bg-slate-950 dark:bg-white text-white dark:text-slate-950 w-[115px] sm:w-[155px] h-9 sm:h-10 rounded-lg font-bold shadow-lg text-xs sm:text-sm hover:translate-y-[-1px] transition-all active:scale-95" onClick={() => navigate('/login')}>
+                        <Button className="bg-slate-950 dark:bg-white text-white dark:text-slate-950 w-auto px-3 sm:px-4 sm:w-[155px] h-8 sm:h-10 rounded-lg font-bold shadow-lg text-[11px] sm:text-sm hover:translate-y-[-1px] transition-all active:scale-95" onClick={() => navigate('/login')}>
                             {t('startNow')}
                         </Button>
                     </div>
