@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta, date
 from typing import Optional, List, Dict, Any
 import math
 
-from app.db import db
+from app.db import db, DEMO_MODE
 from app.deps import get_current_user
 from openpyxl import Workbook
 from io import BytesIO
