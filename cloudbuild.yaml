@@ -1,0 +1,25 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${_IMAGE}', '.']
+    dir: 'backend'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_IMAGE}']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      [
+        'run','deploy','${_SERVICE}',
+        '--image','${_IMAGE}',
+        '--region','${_REGION}',
+        '--platform','managed',
+        '--allow-unauthenticated'
+      ]
+
+substitutions:
+  _SERVICE: 'clear2work-backend'
+  _REGION: 'europe-west1'
+  _IMAGE: 'europe-west1-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/clear2work-backend:${SHORT_SHA}'
+options:
+  logging: CLOUD_LOGGING_ONLY

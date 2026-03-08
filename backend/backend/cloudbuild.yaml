@@ -1,0 +1,11 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "gcr.io/$PROJECT_ID/giris-personel:$SHORT_SHA", "-f", "backend/Dockerfile", "."]
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "gcr.io/$PROJECT_ID/giris-personel:$SHORT_SHA"]
+
+images:
+  - "gcr.io/$PROJECT_ID/giris-personel:$SHORT_SHA"

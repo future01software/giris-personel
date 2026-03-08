@@ -1,0 +1,15 @@
+{
+  "short_name": "Clear2Work",
+  "name": "Clear2Work Giriş Kontrol Sistemi",
+  "icons": [
+    {
+      "src": "favicon-new-v1.png",
+      "sizes": "32x32 48x48 192x192 512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a"
+}

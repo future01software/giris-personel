@@ -1,0 +1,548 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@100..900&family=Pacifico&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══ Smooth dark mode transition (only active during toggle) ═══ */
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color 300ms ease-out,
+    border-color 300ms ease-out,
+    color 300ms ease-out,
+    fill 300ms ease-out,
+    stroke 300ms ease-out,
+    box-shadow 300ms ease-out !important;
+}
+
+/* Never transition the image strip, animations, or images */
+html.theme-transitioning .image-strip,
+html.theme-transitioning .image-strip *,
+html.theme-transitioning .image-strip *::before,
+html.theme-transitioning .image-strip *::after,
+html.theme-transitioning .animate-slide-left,
+html.theme-transitioning .animate-slide-left *,
+html.theme-transitioning .animate-slide-right,
+html.theme-transitioning .animate-slide-right *,
+html.theme-transitioning [class*="animate-"],
+html.theme-transitioning img {
+  transition: none !important;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 98%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 2rem;
+
+    /* Soft Colors - Light Mode */
+    --soft-green: #EBF7F3;
+    --soft-green-text: #17A34A;
+    --soft-amber: #FEFCE8;
+    --soft-amber-text: #D97706;
+    --soft-indigo: #EEF2FF;
+    --soft-indigo-text: #4F46E5;
+    --soft-rose: #FFF1F2;
+    --soft-rose-text: #E11D48;
+
+    /* Pastel Card Backgrounds - Light Mode */
+    --pastel-purple: #F3F0FF;
+    --pastel-purple-text: #7C3AED;
+    --pastel-orange: #FFF4ED;
+    --pastel-orange-text: #EA580C;
+    --pastel-yellow: #FEFCE8;
+    --pastel-yellow-text: #CA8A04;
+    --pastel-mint: #ECFDF5;
+    --pastel-mint-text: #059669;
+  }
+
+  .dark {
+    --background: 0 0% 2%;
+    /* #050505 */
+    --foreground: 210 40% 98%;
+    --card: 0 0% 3%;
+    /* #080808 - slightly lighter than bg for subtle depth */
+    --card-foreground: 210 40% 98%;
+    --popover: 0 0% 3%;
+    /* #080808 */
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 10%;
+    --input: 217.2 32.6% 10%;
+    --ring: 212.7 26.8% 83.9%;
+
+    /* Soft Colors - Dark Mode (More integrated, less white) */
+    --soft-green: rgba(34, 197, 94, 0.15);
+    --soft-green-text: #4ADE80;
+    --soft-amber: rgba(245, 158, 11, 0.15);
+    --soft-amber-text: #FBBF24;
+    --soft-indigo: rgba(99, 102, 241, 0.15);
+    --soft-indigo-text: #818CF8;
+    --soft-rose: rgba(244, 63, 94, 0.15);
+    --soft-rose-text: #FB7185;
+
+    /* Pastel Card Backgrounds - Dark Mode (Darker, more integrated) */
+    --pastel-purple: rgba(139, 92, 246, 0.15);
+    --pastel-purple-text: #C4B5FD;
+    --pastel-orange: rgba(251, 146, 60, 0.15);
+    --pastel-orange-text: #FDBA74;
+    --pastel-yellow: rgba(234, 179, 8, 0.15);
+    --pastel-yellow-text: #FDE047;
+    --pastel-mint: rgba(52, 211, 153, 0.15);
+    --pastel-mint-text: #6EE7B7;
+  }
+
+  body {
+    @apply bg-slate-200 dark:bg-background text-foreground;
+    font-family: 'Outfit', sans-serif;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .sidebar-gradient {
+    /* Refined to match the soft-purple tint in the image */
+    background: linear-gradient(135deg, #FDFCFD 0%, #F8F7FB 100%);
+  }
+
+  .dark .sidebar-gradient {
+    background: linear-gradient(180deg, #1E293B 0%, #0F172A 100%);
+  }
+
+  .shell-container {
+    @apply h-screen w-screen p-1 md:p-1.5 bg-slate-100 dark:bg-background;
+  }
+
+  .shell-inner {
+    @apply h-full w-full rounded-[2rem] md:rounded-[2.5rem] overflow-hidden flex bg-[#F8F7FB] dark:bg-[#070707] shadow-premium;
+  }
+
+  .content-card-wrapper {
+    @apply flex-1 p-2 md:p-3 overflow-hidden flex flex-col;
+  }
+
+  .content-card {
+    @apply flex-1 bg-white dark:bg-[#0A0A0A] rounded-[1.5rem] md:rounded-[1.75rem] shadow-soft overflow-y-auto border border-transparent dark:border-white/5;
+  }
+
+  /* Pastel Card Backgrounds */
+  .bg-pastel-purple {
+    background-color: var(--pastel-purple);
+  }
+
+  .text-pastel-purple {
+    color: var(--pastel-purple-text);
+  }
+
+  .bg-pastel-mint {
+    background-color: var(--pastel-mint);
+  }
+
+  .text-pastel-mint {
+    color: var(--pastel-mint-text);
+  }
+
+  .bg-pastel-orange {
+    background-color: var(--pastel-orange);
+  }
+
+  .text-pastel-orange {
+    color: var(--pastel-orange-text);
+  }
+
+  .bg-pastel-yellow {
+    background-color: var(--pastel-yellow);
+  }
+
+  .text-pastel-yellow {
+    color: var(--pastel-yellow-text);
+  }
+
+  .bg-pastel-rose {
+    background-color: var(--soft-rose);
+  }
+
+  .text-pastel-rose {
+    color: var(--soft-rose-text);
+  }
+
+  .shadow-soft {
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.05);
+  }
+
+  .shadow-premium {
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Prevent zoom on mobile inputs */
+  @media screen and (max-width: 768px) {
+
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  .filter-control {
+    height: 42px;
+    min-height: 42px;
+    padding-left: 12px;
+    padding-right: 12px;
+    font-size: 14px;
+    line-height: 20px;
+    display: flex;
+    align-items: center;
+  }
+}
+
+/* ===============================
+   LOGIN PAGE ANIMATIONS
+   =============================== */
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px) scale(1);
+  }
+
+  50% {
+    transform: translateY(-20px) scale(1.05);
+  }
+}
+
+@keyframes float-delayed {
+
+  0%,
+  100% {
+    transform: translateY(0px) scale(1);
+  }
+
+  50% {
+    transform: translateY(-30px) scale(1.1);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse-subtle {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-up-delayed {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  50% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-5px);
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(5px);
+  }
+}
+
+@keyframes wiggle {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-3px);
+  }
+
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in-delayed {
+  0% {
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Animation utility classes */
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float-delayed 8s ease-in-out infinite;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s ease-out;
+}
+
+.animate-fade-in-up-delayed {
+  animation: fade-in-up-delayed 1.2s ease-out;
+}
+
+.animate-shimmer {
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes cyan-flow {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.animate-cyan-flow {
+  background: linear-gradient(90deg, transparent 0%, #06b6d4 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: cyan-flow 2s linear infinite;
+}
+
+.animate-monochrome-flow {
+  background: linear-gradient(90deg, transparent 0%, rgba(148, 163, 184, 0.5) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: cyan-flow 2s linear infinite;
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+.animate-wiggle {
+  animation: wiggle 0.3s ease-in-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out;
+}
+
+.animate-fade-in-delayed {
+  animation: fade-in-delayed 1s ease-out;
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient 8s ease infinite;
+}
+
+/* ===============================
+   SUBTLE MOVING GRID OVERLAY
+   (Login Left Side)
+   =============================== */
+
+@keyframes gridMove {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(-64px, -64px, 0);
+  }
+}
+
+.animate-grid-move {
+  animation: gridMove 24s linear infinite;
+}
+
+@layer utilities {
+  .premium-gradient {
+    @apply bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/20;
+  }
+
+  .glass-panel {
+    @apply bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 shadow-lg;
+  }
+
+  .glass-header {
+    @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50;
+  }
+
+  /* Premium Stat Card Gradients */
+  .stat-gradient-blue {
+    @apply bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/25;
+  }
+
+  .stat-gradient-green {
+    @apply bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/25;
+  }
+
+  .stat-gradient-amber {
+    @apply bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/25;
+  }
+
+  .stat-gradient-red {
+    @apply bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-lg shadow-rose-500/25;
+  }
+
+  .stat-gradient-purple {
+    @apply bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-lg shadow-purple-500/25;
+  }
+
+  /* Smooth Transitions */
+  .transition-smooth {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  /* Hover Effects */
+  .hover-lift {
+    @apply transition-smooth;
+    will-change: transform, box-shadow;
+    transform: translateZ(0);
+  }
+
+  .hover-lift:hover {
+    transform: translateZ(0) scale(1.02);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+
+  /* Icon Backgrounds */
+  .icon-bg-blue {
+    @apply bg-blue-500/20 text-blue-600 dark:bg-blue-500/30 dark:text-blue-400;
+  }
+
+  .icon-bg-green {
+    @apply bg-emerald-500/20 text-emerald-600 dark:bg-emerald-500/30 dark:text-emerald-400;
+  }
+
+  .icon-bg-amber {
+    @apply bg-amber-500/20 text-amber-600 dark:bg-amber-500/30 dark:text-amber-400;
+  }
+
+  .icon-bg-red {
+    @apply bg-rose-500/20 text-rose-600 dark:bg-rose-500/30 dark:text-rose-400;
+  }
+}
