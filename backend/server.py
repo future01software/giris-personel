@@ -38,6 +38,7 @@ origins = [
   "https://clear2work-484405.firebaseapp.com",
   "https://clear2workport.net",
   "https://www.clear2workport.net",
+  "https://easy.clear2workport.net",
 ]
 
 app.add_middleware(
