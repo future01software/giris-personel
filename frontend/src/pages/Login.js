@@ -162,8 +162,12 @@ const Login = () => {
             </Label>
             <Input
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => setUsername(e.target.value.trim())}
               placeholder={t('usernamePlaceholder')}
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="username"
+              spellCheck="false"
               className="h-11 rounded-xl bg-white dark:bg-black/40 border-slate-200 dark:border-white/10 focus:ring-1 focus:ring-slate-900 dark:focus:ring-white transition-all text-sm px-4"
             />
           </div>
@@ -178,6 +182,10 @@ const Login = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={t('passwordPlaceholder')}
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="current-password"
+                spellCheck="false"
                 className="h-11 rounded-xl bg-white dark:bg-black/40 border-slate-200 dark:border-white/10 focus:ring-1 focus:ring-slate-900 dark:focus:ring-white transition-all text-sm px-4 pr-10"
               />
               <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
