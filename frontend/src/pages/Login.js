@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -66,16 +65,19 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
+
     if (!username.trim() || !password.trim()) {
       setError(t('fillAllFields'));
       return;
     }
+
     setError('');
     setLoading(true);
+
     try {
       await login(username, password);
       toastSuccess(t('loginSuccess'), t('redirecting'));
-      window.location.assign('/dashboard');
+      window.location.assign('/app');
     } catch (err) {
       setError(t('invalidCredentials'));
       toastError(t('loginDenied'), t('invalidCredentials'));
@@ -87,12 +89,9 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#050505] p-4 font-['Outfit',_sans-serif] transition-colors duration-500">
 
-      {/* Background Image Mosaic */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        {/* Gradient base layers (bottom) */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#F8FAFC] via-[#F8FAFC]/60 to-[#F8FAFC] dark:from-[#050505] dark:via-[#050505]/40 dark:to-[#050505]" />
         <div className="absolute inset-0 bg-gradient-to-r from-[#F8FAFC]/50 via-transparent to-[#F8FAFC]/50 dark:from-[#050505]/50 dark:via-transparent dark:to-[#050505]/50" />
-        {/* Image grid (on top of gradients) */}
         <div className="absolute inset-0 grid grid-cols-3 grid-rows-2 gap-4 p-8 z-10 opacity-[0.15] dark:opacity-[0.25]">
           {[
             '/assets/landing/port.png',
