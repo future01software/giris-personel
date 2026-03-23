@@ -33,8 +33,10 @@ export const AuthProvider = ({ children }) => {
       return true;
     } catch (error) {
       const status = error?.response?.status;
+      console.error('fetchUser failed:', status, error?.response?.data || error.message);
 
-      if (status === 401 || status === 403) {
+      // Sadece gerçekten token geçersizse logout
+      if (status === 401) {
         logout();
       } else {
         setLoading(false);
@@ -47,6 +49,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     applyToken(token);
+
     if (token) {
       fetchUser();
     } else {
@@ -69,17 +72,17 @@ export const AuthProvider = ({ children }) => {
       setUser(newUser || null);
       applyToken(newToken);
 
-      await fetchUser();
+      // fetchUser kaldırıldı; login response'daki user yeterli
       return true;
     } catch (error) {
+      console.error('login failed:', error?.response?.status, error?.response?.data || error.message);
       logout();
       throw error;
     } finally {
       setLoading(false);
     }
-  }, [applyToken, fetchUser, logout]);
+  }, [applyToken, logout]);
 
-  // Memoize context value to prevent unnecessary re-renders
   const value = useMemo(
     () => ({ user, token, login, logout, loading }),
     [user, token, login, logout, loading]
