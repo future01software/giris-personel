@@ -90,6 +90,7 @@ const AnimatedRoutes = () => {
             </PageTransition>
           }
         />
+
         <Route
           path="/login"
           element={
@@ -98,6 +99,7 @@ const AnimatedRoutes = () => {
             </PageTransition>
           }
         />
+
         <Route
           path="/reset-password"
           element={
@@ -106,6 +108,9 @@ const AnimatedRoutes = () => {
             </PageTransition>
           }
         />
+
+        {/* Login sonrası yönlendirme için tek merkez */}
+        <Route path="/app" element={<RoleBasedRedirect />} />
 
         {/* Persistent Layout for all protected pages */}
         <Route element={<LayoutWrapper />}>
@@ -230,8 +235,6 @@ const AnimatedRoutes = () => {
             }
           />
         </Route>
-
-        <Route path="/" element={<RoleBasedRedirect />} />
       </Routes>
     </AnimatePresence>
   );
