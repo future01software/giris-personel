@@ -376,6 +376,22 @@ async def bulk_import_personnel(file: UploadFile = File(...), current_user: dict
 
         df = df.dropna(how="all")
 
+        # Clean BOM characters (ï»¿ or \ufeff) and strip whitespace from columns
+        df.columns = [str(c).replace('\ufeff', '').replace('ï»¿', '').strip() for c in df.columns]
+
+        # Map English template columns to Turkish if the template was downloaded in English
+        column_mapping = {
+            "Full Name": "Ad Soyad",
+            "Company": "Şirket",
+            "Assignment Start": "Görev Başlangıç",
+            "Assignment End": "Görev Bitiş",
+            "ID Number": "TC Kimlik No",
+            "Phone": "Telefon",
+            "License Plate": "Plaka",
+            "Photo URL": "Fotoğraf URL"
+        }
+        df.rename(columns=column_mapping, inplace=True)
+
         doc_types = await db.document_types.find({}, {"_id": 0}).to_list(100)
         doc_type_map_tr = {dt["name_tr"]: dt["id"] for dt in doc_types}
         doc_type_map_en = {dt["name_en"]: dt["id"] for dt in doc_types}
