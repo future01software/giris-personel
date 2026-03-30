@@ -31,8 +31,6 @@ import { Skeleton } from '../components/ui/skeleton';
 import { toTurkishUpperCase } from '../utils/textHelpers';
 import axios from 'axios';
 import { useWebSocket } from '../contexts/WebSocketContext';
-// Chart imports removed as they are unused
-
 const API = `${process.env.REACT_APP_BACKEND_URL || 'http://' + window.location.hostname + ':8000'}/api`;
 const ALERT_DAYS = 30;
 const LOG_POLL_MS = 60000; // Increased to 60s because WebSocket is active
@@ -41,13 +39,6 @@ const LOG_WINDOW_HOURS = 24;
 // --- Helper Functions ---
 const pad2 = (n) => String(n).padStart(2, '0');
 const ymdOf = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-const todayYMD = () => ymdOf(new Date());
-const yesterdayYMD = () => {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return ymdOf(d);
-};
-
 
 
 const normalizeAction = (log) => {
@@ -63,40 +54,30 @@ const normalizeAction = (log) => {
   return '';
 };
 
-// --- Optimized Global Timer Hook ---
-// Shares a single interval across all components to prevent timer thrashing
-const useGlobalTicker = (intervalMs = 1000) => {
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(Date.now());
-    }, intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
-
-  return now;
-};
-
 const getLogTs = (x) => x?.timestamp || x?.created_at || x?.entry_time || x?.exit_time || x?.createdAt || '';
 
 const formatDuration = (ms, t) => {
   const diffSecs = Math.floor(ms / 1000);
-  // Less than 1 minute
   if (diffSecs < 60) return `< 1${t('minutesUnit')}`;
-
   const hours = Math.floor(diffSecs / 3600);
   const mins = Math.floor((diffSecs % 3600) / 60);
   const pad = (n) => String(n).padStart(2, '0');
-
   return (hours > 0 ? `${hours}${t('hoursUnit')} ` : '') + `${pad(mins)}${t('minutesUnit')}`;
 };
 
-// --- Optimized Duration Component ---
-const LiveDuration = React.memo(({ startTime, isEntry, staticDuration, now, t }) => {
-  if (!isEntry) return staticDuration || '-';
-  const diffMs = Math.max(0, now - new Date(startTime).getTime());
-  return formatDuration(diffMs, t);
+const LiveDuration = React.memo(({ timestamp, label, t }) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000); // 30s update is enough
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+      {formatDuration(now - timestamp, t)} {label}
+    </span>
+  );
 });
 
 const Dashboard = () => {
@@ -105,8 +86,6 @@ const Dashboard = () => {
   const { alerts, loading: alertsLoading } = useAlerts();
   const navigate = useNavigate();
 
-  // Global Ticker: Runs once every 30 seconds (sufficient for min-level updates)
-  const now = useGlobalTicker(30000);
 
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -163,13 +142,10 @@ const Dashboard = () => {
   const fetchSecurityLogs = useCallback(async () => {
     setSecurityLogsLoading(true);
     try {
-      // Optimized: Reduced from 400 to 100 records per day for better performance
-      const [todayRes, yestRes] = await Promise.all([
-        axios.get(`${API}/entry-logs/paginated?page=1&limit=100&day=${todayYMD()}`),
-        axios.get(`${API}/entry-logs/paginated?page=1&limit=100&day=${yesterdayYMD()}`),
-      ]);
+      // Tek istek: Son kayıtları çek (2 istek yerine 1 = %50 ağ tasarrufu)
+      const res = await axios.get(`${API}/entry-logs/paginated?page=1&limit=50`);
 
-      const list = [...(todayRes?.data?.data || []), ...(yestRes?.data?.data || [])];
+      const list = res?.data?.data || [];
       const nowMs = Date.now();
       const cutoffMs = nowMs - LOG_WINDOW_HOURS * 60 * 60 * 1000;
 
@@ -183,6 +159,7 @@ const Dashboard = () => {
             _norm_ts_ms: ts ? new Date(ts).getTime() : NaN,
             _pid: x.person_id || x.personnel_id,
             _full_name: x.person_full_name || x.personnel_name || '—',
+            _gate: x.gate || x.security_unit || '',
           };
         })
         .filter((x) => x._pid && (x._norm_action === 'in' || x._norm_action === 'out') && x._norm_ts_ms >= cutoffMs);
@@ -202,29 +179,7 @@ const Dashboard = () => {
     // Users can manually refresh using the refresh button if needed
   }, [fetchSecurityLogs]);
 
-  const chartData = useMemo(() => {
-    const buckets = [];
-    const now = new Date();
-    for (let i = 23; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 60 * 60 * 1000);
-      buckets.push({
-        hour: d.getHours(),
-        label: `${String(d.getHours()).padStart(2, '0')}:00`,
-        entries: 0,
-        exits: 0
-      });
-    }
-    securityLogs.forEach(log => {
-      const d = new Date(log._norm_ts_ms);
-      const h = d.getHours();
-      const bucket = buckets.find(b => b.hour === h);
-      if (bucket) {
-        if (log._norm_action === 'in') bucket.entries++;
-        else bucket.exits++;
-      }
-    });
-    return buckets;
-  }, [securityLogs]);
+
 
   const recentEntries = useMemo(() => {
     const latestMap = new Map();
@@ -332,35 +287,36 @@ const Dashboard = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-6 pb-6">
           <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#080808] p-4 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#080808] p-4 lg:p-6 rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-premium">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-50 dark:bg-white/5 rounded-lg text-blue-600 dark:text-blue-400">
-                  <Clock className="w-5 h-5" />
+                <div className="p-2 sm:p-3 bg-blue-50 dark:bg-white/5 rounded-2xl text-blue-600 dark:text-blue-400">
+                  <Clock className="w-5 h-5 sm:w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     {t('entryExitLogsTitle')}
-                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-900 text-white text-xs font-bold">
+                    <span className="flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full bg-slate-900 text-white text-[10px] font-bold">
                       {recentEntries.length}
                     </span>
                   </h3>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <p className="text-xs text-slate-500">{t('last24Hours')}</p>
-                    <span className="text-slate-300">•</span>
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">{t('last24Hours')}</p>
+                    <span className="text-slate-200 dark:text-slate-800">•</span>
+                    <div className="flex items-center gap-2">
                       <span className="relative flex h-2 w-2">
                         <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${(stats?.inside_count || 0) > 0 ? 'bg-emerald-400' : 'bg-slate-400'}`}></span>
                         <span className={`relative inline-flex rounded-full h-2 w-2 ${(stats?.inside_count || 0) > 0 ? 'bg-emerald-500' : 'bg-slate-500'}`}></span>
                       </span>
-                      <span className={`text-xs font-medium ${(stats?.inside_count || 0) > 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-600 dark:text-slate-300'}`}>
+                      <span className={`text-[11px] font-bold ${(stats?.inside_count || 0) > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-500'}`}>
                         {t('insideLabel')} {stats?.inside_count || 0}
                       </span>
                     </div>
                   </div>
                 </div>
               </div>
+
 
               <div className="flex items-center gap-2">
                 <Button
@@ -389,6 +345,15 @@ const Dashboard = () => {
                 const isEntry = log._norm_action === 'in';
                 const logDate = new Date(log._norm_ts_ms);
                 const timeStr = logDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const todayDate = new Date();
+                const isToday = logDate.getDate() === todayDate.getDate() &&
+                                logDate.getMonth() === todayDate.getMonth() &&
+                                logDate.getFullYear() === todayDate.getFullYear();
+                const dateStr = logDate.toLocaleDateString(i18n.language, {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric'
+                });
 
                 const GATE_NAMES = {
                   'ADMIN_BUILDING': t('ADMIN_BUILDING'),
@@ -436,12 +401,22 @@ const Dashboard = () => {
                         <div className="text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                           {timeStr}
                         </div>
-                        <div className="text-[11px] font-medium text-slate-600 dark:text-slate-400 tabular-nums">
-                          {isEntry ? (
-                            <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
-                              {/* Calculate time since entry */}
-                              {formatDuration(Date.now() - log._norm_ts_ms, t)} {t('insideTime')}
+                        <div className={`text-[10px] tabular-nums mt-0.5 ${isToday ? 'text-slate-400 dark:text-slate-500' : 'text-amber-600 dark:text-amber-400 font-bold'}`}>
+                          {isToday ? (
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {dateStr}
                             </span>
+                          ) : (
+                            <span className="flex items-center gap-1 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">
+                              <Calendar className="w-3 h-3" />
+                              {dateStr}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] font-medium text-slate-600 dark:text-slate-400 tabular-nums mt-0.5">
+                          {isEntry ? (
+                            <LiveDuration timestamp={log._norm_ts_ms} label={t('insideTime')} t={t} />
                           ) : (
                             <span className="font-semibold text-slate-700 dark:text-slate-300">
                               {displayDuration ? (

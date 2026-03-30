@@ -60,7 +60,7 @@ const PersonnelRow = React.memo(({ person, isSelected, onToggle, onNavigate, onD
         {person.license_plate || '-'}
       </td>
       <td className="px-6 py-4">
-        <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all duration-500 transform group-hover:translate-x-0 translate-x-4">
+        <div className="flex justify-end gap-3 opacity-40 group-hover:opacity-100 transition-opacity duration-150">
           <button
             onClick={() => onNavigate(person.id)}
             className="p-2.5 bg-white dark:bg-white/10 rounded-xl shadow-soft border border-slate-100 dark:border-white/10 transition-all hover:scale-110 active:scale-90"
@@ -325,9 +325,10 @@ const Personnel = () => {
         sampleRow2.push('');
       });
 
-      let csv = headers.join(',') + '\n';
-      csv += sampleRow1.join(',') + '\n';
-      csv += sampleRow2.join(',') + '\n';
+      // Excel'in Türkçe/Avrupa versiyonlarında CSV ayırıcısı noktalı virgül (;) olmalıdır.
+      let csv = headers.join(';') + '\n';
+      csv += sampleRow1.join(';') + '\n';
+      csv += sampleRow2.join(';') + '\n';
 
       const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');

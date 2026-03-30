@@ -148,10 +148,6 @@ async def get_personnel(
 
 
 @router.get("/search")
-
-
-
-@router.get("/search")
 async def search_personnel(
     q: str = None, 
     name: str = None, 
@@ -159,6 +155,19 @@ async def search_personnel(
     tc: str = None, 
     current_user: dict = Depends(get_current_user)
 ):
+    if DEMO_MODE:
+        demo_personnel = [
+            {"id": "demo_p_0", "full_name": "Ahmet Yılmaz", "tc_number": "12345678900", "company": "Demolife İnşaat", "phone": "+90 555 111 22 33", "overall_status": "green", "assignment_end": (datetime.now() + timedelta(days=60)).isoformat()},
+            {"id": "demo_p_1", "full_name": "Mehmet Demir", "tc_number": "12345678901", "company": "Demolife İnşaat", "phone": "+90 555 222 33 44", "overall_status": "green", "assignment_end": (datetime.now() + timedelta(days=45)).isoformat()},
+            {"id": "demo_p_2", "full_name": "Ayşe Kaya", "tc_number": "12345678902", "company": "Yıldız Liman", "phone": "+90 555 333 44 55", "overall_status": "yellow", "assignment_end": (datetime.now() + timedelta(days=10)).isoformat()},
+            {"id": "demo_p_3", "full_name": "Fatma Çelik", "tc_number": "12345678903", "company": "Yıldız Liman", "phone": "+90 555 444 55 66", "overall_status": "red", "assignment_end": (datetime.now() - timedelta(days=5)).isoformat()},
+            {"id": "demo_p_4", "full_name": "Can Özkan", "tc_number": "12345678904", "company": "Atlas Tersane", "phone": "+90 555 555 66 77", "overall_status": "green", "assignment_end": (datetime.now() + timedelta(days=90)).isoformat()},
+        ]
+        search_term = (q or name or surname or tc or "").lower()
+        if search_term:
+            return [p for p in demo_personnel if search_term in p["full_name"].lower() or search_term in p["tc_number"] or search_term in p["company"].lower()]
+        return demo_personnel
+
     clauses = []
 
     # 1) Eski genel arama (q)
@@ -176,12 +185,10 @@ async def search_personnel(
     # 2) Gelişmiş arama alanları (name, surname, tc)
     if name:
         regex_name = prepare_turkish_search(name)
-        # Adı içinde geçsin
         clauses.append({"full_name": {"$regex": regex_name, "$options": "i"}})
     
     if surname:
         regex_surname = prepare_turkish_search(surname)
-        # Soyadı içinde geçsin (full_name hem ad hem soyad içerir, basitçe contains bakıyoruz)
         clauses.append({"full_name": {"$regex": regex_surname, "$options": "i"}})
 
     if tc:
@@ -207,6 +214,61 @@ async def get_personnel_companies(current_user: dict = Depends(get_current_user)
 
 @router.get("/{personnel_id}")
 async def get_personnel_detail(personnel_id: str, current_user: dict = Depends(get_current_user)):
+    if DEMO_MODE:
+        demo_map = {
+            "demo_p_0": {"id": "demo_p_0", "full_name": "Ahmet Yılmaz", "tc_number": "12345678900", "company": "Demolife İnşaat", "phone": "+90 555 111 22 33", "assignment_end": (datetime.now() + timedelta(days=60)).isoformat()},
+            "demo_p_1": {"id": "demo_p_1", "full_name": "Mehmet Demir", "tc_number": "12345678901", "company": "Demolife İnşaat", "phone": "+90 555 222 33 44", "assignment_end": (datetime.now() + timedelta(days=45)).isoformat()},
+            "demo_p_2": {"id": "demo_p_2", "full_name": "Ayşe Kaya", "tc_number": "12345678902", "company": "Yıldız Liman", "phone": "+90 555 333 44 55", "assignment_end": (datetime.now() + timedelta(days=10)).isoformat()},
+            "demo_p_3": {"id": "demo_p_3", "full_name": "Fatma Çelik", "tc_number": "12345678903", "company": "Yıldız Liman", "phone": "+90 555 444 55 66", "assignment_end": (datetime.now() - timedelta(days=5)).isoformat()},
+            "demo_p_4": {"id": "demo_p_4", "full_name": "Can Özkan", "tc_number": "12345678904", "company": "Atlas Tersane", "phone": "+90 555 555 66 77", "assignment_end": (datetime.now() + timedelta(days=90)).isoformat()},
+        }
+        personnel = demo_map.get(personnel_id)
+        if not personnel:
+            raise HTTPException(status_code=404, detail="Personnel not found")
+
+        now = datetime.now(timezone.utc)
+        assignment_expired = False
+        if personnel.get("assignment_end"):
+            ae = datetime.fromisoformat(personnel["assignment_end"])
+            if ae.tzinfo is None:
+                ae = ae.replace(tzinfo=timezone.utc)
+            if ae < now:
+                assignment_expired = True
+
+        demo_docs = [
+            {
+                "id": f"doc_{personnel_id}_1",
+                "personnel_id": personnel_id,
+                "document_type_id": "dt_1",
+                "expiry_date": (now + timedelta(days=120)).isoformat(),
+                "notes": "Demo belge",
+                "document_type": {"id": "dt_1", "name_tr": "İş Güvenliği Eğitimi", "name_en": "Safety Training", "is_mandatory": True, "warning_days": 30},
+                "status": "valid",
+                "days_until_expiry": 120
+            },
+            {
+                "id": f"doc_{personnel_id}_2",
+                "personnel_id": personnel_id,
+                "document_type_id": "dt_2",
+                "expiry_date": (now + timedelta(days=200)).isoformat(),
+                "notes": "Demo belge",
+                "document_type": {"id": "dt_2", "name_tr": "Sağlık Raporu", "name_en": "Health Report", "is_mandatory": True, "warning_days": 30},
+                "status": "valid",
+                "days_until_expiry": 200
+            },
+        ]
+
+        overall_status = "red" if assignment_expired else "green"
+        status_reason = "assignment_expired" if assignment_expired else "all_valid"
+
+        return {
+            "personnel": personnel,
+            "documents": demo_docs,
+            "overall_status": overall_status,
+            "status_reason": status_reason,
+            "assignment_expired": assignment_expired
+        }
+
     personnel = await db.personnel.find_one({"id": personnel_id}, {"_id": 0})
     if not personnel:
         raise HTTPException(status_code=404, detail="Personnel not found")
@@ -308,7 +370,7 @@ async def bulk_import_personnel(file: UploadFile = File(...), current_user: dict
     try:
         contents = await file.read()
         if file.filename.endswith(".csv"):
-            df = pd.read_csv(io.BytesIO(contents))
+            df = pd.read_csv(io.BytesIO(contents), sep=None, engine="python")
         else:
             df = pd.read_excel(io.BytesIO(contents))
 
@@ -341,6 +403,10 @@ async def bulk_import_personnel(file: UploadFile = File(...), current_user: dict
                 return date_str
             except Exception:
                 return None
+
+        personnel_batch = []
+        document_batch = []
+        BATCH_SIZE = 100
 
         for index, row in df.iterrows():
             try:
@@ -380,7 +446,7 @@ async def bulk_import_personnel(file: UploadFile = File(...), current_user: dict
                     skipped_count += 1
                     continue
 
-                await db.personnel.insert_one(personnel_doc)
+                personnel_batch.append(personnel_doc)
 
                 for col in df.columns:
                     if col not in required_columns and col not in ["Ad Soyad", "TC Kimlik No", "Telefon", "Plaka", "Fotoğraf URL", "Görev Başlangıç", "Görev Bitiş"]:
@@ -390,21 +456,34 @@ async def bulk_import_personnel(file: UploadFile = File(...), current_user: dict
                             if expiry_date_raw and expiry_date_raw != "" and expiry_date_raw.lower() != "nan":
                                 expiry_date = convert_date(expiry_date_raw)
                                 if expiry_date:
-                                    doc = {
+                                    document_batch.append({
                                         "id": f"{new_id('doc')}_{index}_{col}",
                                         "personnel_id": personnel_id,
                                         "document_type_id": doc_type_id,
                                         "expiry_date": expiry_date,
                                         "notes": "Imported from Excel",
                                         "created_at": datetime.now(timezone.utc).isoformat()
-                                    }
-                                    await db.personnel_documents.insert_one(doc)
+                                    })
 
                 imported_count += 1
+
+                # Batch insert (her 100 kayıtta bir yaz)
+                if len(personnel_batch) >= BATCH_SIZE:
+                    await db.personnel.insert_many(personnel_batch)
+                    personnel_batch = []
+                if len(document_batch) >= BATCH_SIZE:
+                    await db.personnel_documents.insert_many(document_batch)
+                    document_batch = []
 
             except Exception as e:
                 errors.append(f"Row {index + 2}: {str(e)}")
                 continue
+
+        # Kalan batch'leri yaz
+        if personnel_batch:
+            await db.personnel.insert_many(personnel_batch)
+        if document_batch:
+            await db.personnel_documents.insert_many(document_batch)
 
         return {"message": "Import completed", "imported": imported_count, "skipped": skipped_count, "errors": errors}
 

@@ -103,31 +103,35 @@ def _build_day_query(day: Optional[str], action: Optional[str]) -> Dict[str, Any
         a = action.upper().strip()
         if a not in ("IN", "OUT"):
             raise HTTPException(status_code=400, detail="action IN veya OUT olmalı")
-        q["_action_filter_requested"] = a
+        
+        # Sadece action veya decision alanına göre DB'de filtrele
+        q["$or"] = q.get("$or", []) + [
+            {"action": a},
+            {"decision": a}
+        ]
 
     return q
 
 # =========================
 # ✅ UPDATED: SEARCH (lookback + duration_sec)
-# =========================
-@router.get("/search")
+# ==================@router.get("/search")
 async def search_entry_logs(
     q: str,
     day: Optional[str] = None,          # YYYY-MM-DD opsiyonel
-    action: Optional[str] = None,       # IN/OUT opsiyonel (response'ta filtrelenir)
+    action: Optional[str] = None,       # IN/OUT opsiyonel
     limit: int = 200,
     current_user: dict = Depends(get_current_user),
 ):
     """
     q: person adı / şirket / tc ile arama (snapshot alanları üzerinden)
     day: verilirse TR günü; ayrıca lookback ile (önceki gün IN) yakalanır
-    action: IN/OUT (python tarafında uygulanır)
+    action: IN/OUT
     NOT: OUT satırına duration_sec ekler (IN->OUT farkı)
     """
     require_role(current_user, ["admin", "security"])
 
-    q = (q or "").strip()
-    if not q:
+    q_str = (q or "").strip()
+    if not q_str:
         return {"items": []}
 
     limit = max(1, min(limit, 500))
@@ -140,17 +144,26 @@ async def search_entry_logs(
             raise HTTPException(status_code=400, detail="action IN veya OUT olmalı")
         action_req = a
 
-    # arama -> snapshot alanları
-    search_or = {
-        "$or": [
-            {"person_full_name": {"$regex": q, "$options": "i"}},
-            {"person_company": {"$regex": q, "$options": "i"}},
-            {"person_tc_number": {"$regex": q, "$options": "i"}},
-        ]
-    }
+    # 1) Arama filtreleri (snapshot alanları)
+    search_clauses = [
+        {"person_full_name": {"$regex": q_str, "$options": "i"}},
+        {"person_company": {"$regex": q_str, "$options": "i"}},
+        {"person_tc_number": {"$regex": q_str, "$options": "i"}},
+    ]
+    query = {"$or": search_clauses}
 
-    # day varsa: lookback ile çek (önceki gün başlayan uzun mesailer için)
-    base = {}
+    # 2) Action filtresini de DB seviyesine ekle (Eğer day yoksa)
+    # Day varsa duration hesabı için tüm actionları çekmemiz gerekebilir, 
+    # ama genellikle arama yaparken sadece IN veya sadece OUT isteniyorsa DB'de filtrelemek mantıklı.
+    # Ancak duration hesabı için OUT logu için eşleşen IN loguna ihtiyacımız var.
+    # Bu yüzden sadece 'action' filtresini day yoksa DB'de yapalım.
+    if action_req and not day:
+        query = {"$and": [
+            query,
+            {"$or": [{"action": action_req}, {"decision": action_req}]}
+        ]}
+
+    # 3) Day varsa: lookback ile çek (önceki gün başlayan uzun mesailer için)
     start_ts = None
     end_ts = None
     if day:
@@ -158,11 +171,11 @@ async def search_entry_logs(
         start_ts = start_local.timestamp()
         end_ts = end_local.timestamp()
         lookback_ts = start_ts - 48 * 3600  # 48 saat güvenli aralık
-
+        
         day_prefix = day
         regex = {"$regex": f"^{day_prefix}"}
 
-        base = {
+        day_query = {
             "$or": [
                 {"created_at_ts": {"$gte": lookback_ts, "$lt": end_ts}},
                 {"timestamp_ts": {"$gte": lookback_ts, "$lt": end_ts}},
@@ -170,16 +183,13 @@ async def search_entry_logs(
                 {"timestamp": regex},
             ]
         }
+        query = {"$and": [query, day_query]}
 
-    # query birleştir
-    if base:
-        query = {"$and": [base, search_or]}
-    else:
-        query = search_or
+    # Veriyi çek
+    cursor = db["entry_logs"].find(query).sort([("created_at_ts", 1)])
+    raw = [_clean(x) async for x in cursor.limit(limit * 5)]
 
-    raw = [_clean(x) async for x in db["entry_logs"].find(query).limit(limit * 10)]
-
-    # normalize fields
+    # Normalize fields
     for x in raw:
         x["action"] = _action_of(x)
         x["_ts"] = _ts_of(x)
@@ -192,8 +202,8 @@ async def search_entry_logs(
         if not x.get("created_by_name") and x.get("checked_by_name"):
             x["created_by_name"] = x["checked_by_name"]
 
-    # duration_sec hesapla (kişi bazlı IN->OUT)
-    raw.sort(key=lambda z: z.get("_ts", 0))  # asc
+    # Duration_sec hesapla (kişi bazlı IN->OUT)
+    # Not: Sıralama asc (1) yaptık ki baştan sona eşleşsinler
     open_in: Dict[str, float] = {}
     duration_by_id: Dict[str, int] = {}
 
@@ -211,21 +221,26 @@ async def search_entry_logs(
             if in_ts is not None and ts > in_ts:
                 duration_by_id[log["id"]] = int(ts - in_ts)
 
-    # duration_sec alanını ekle
+    # Day/Action filtreleri ve duration ekleme
+    items = []
     for log in raw:
+        # Duration ekle
         if log.get("action") == "OUT":
             log["duration_sec"] = duration_by_id.get(log["id"])
+        
+        # Day filtre
+        if day and start_ts is not None and end_ts is not None:
+            ts = log.get("_ts") or 0
+            if not (start_ts <= ts < end_ts):
+                continue
+        
+        # Action filtre (Response seviyesinde, duration hesabı bozulmasın diye burada kalsın)
+        if action_req and log.get("action") != action_req:
+            continue
+            
+        items.append(log)
 
-    # day varsa: sadece gün içi kayıtları döndür (ama duration için lookback kullandık)
-    items = raw
-    if day and start_ts is not None and end_ts is not None:
-        items = [x for x in raw if (start_ts <= (x.get("_ts") or 0) < end_ts)]
-
-    # action filtre (response seviyesinde)
-    if action_req:
-        items = [x for x in items if x.get("action") == action_req]
-
-    # desc sırala + limit
+    # Son olarak DESC sırala ve limit uygula
     items.sort(key=lambda z: z.get("_ts", 0), reverse=True)
     items = items[:limit]
 
@@ -248,43 +263,135 @@ async def paginated(
     require_role(current_user, ["admin", "security"])
 
     if DEMO_MODE:
+        now = datetime.now(timezone.utc)
         mock_items = [
             {
                 "id": "demo_log_1",
+                "person_id": "demo_p_0", "personnel_id": "demo_p_0",
                 "person_full_name": "Ahmet Yılmaz",
                 "person_company": "Demolife İnşaat",
-                "action": "IN",
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "gate": "MAIN_GATE"
+                "person_tc_number": "12345678900",
+                "action": "IN", "decision": "IN",
+                "timestamp": (now - timedelta(minutes=5)).isoformat(),
+                "created_at": (now - timedelta(minutes=5)).isoformat(),
+                "timestamp_ts": (now - timedelta(minutes=5)).timestamp(),
+                "created_at_ts": (now - timedelta(minutes=5)).timestamp(),
+                "checked_by_name": "Demo Admin",
+                "gate": "PORT_FACILITY"
             },
             {
                 "id": "demo_log_2",
+                "person_id": "demo_p_1", "personnel_id": "demo_p_1",
                 "person_full_name": "Mehmet Demir",
                 "person_company": "Demolife İnşaat",
-                "action": "OUT",
-                "created_at": (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat(),
+                "person_tc_number": "12345678901",
+                "action": "IN", "decision": "IN",
+                "timestamp": (now - timedelta(minutes=20)).isoformat(),
+                "created_at": (now - timedelta(minutes=20)).isoformat(),
+                "timestamp_ts": (now - timedelta(minutes=20)).timestamp(),
+                "created_at_ts": (now - timedelta(minutes=20)).timestamp(),
+                "checked_by_name": "Demo Admin",
+                "gate": "PORT_FACILITY"
+            },
+            {
+                "id": "demo_log_3",
+                "person_id": "demo_p_4", "personnel_id": "demo_p_4",
+                "person_full_name": "Can Özkan",
+                "person_company": "Atlas Tersane",
+                "person_tc_number": "12345678904",
+                "action": "IN", "decision": "IN",
+                "timestamp": (now - timedelta(minutes=45)).isoformat(),
+                "created_at": (now - timedelta(minutes=45)).isoformat(),
+                "timestamp_ts": (now - timedelta(minutes=45)).timestamp(),
+                "created_at_ts": (now - timedelta(minutes=45)).timestamp(),
+                "checked_by_name": "Demo Admin",
+                "gate": "ADMIN_BUILDING"
+            },
+            {
+                "id": "demo_log_4",
+                "person_id": "demo_p_2", "personnel_id": "demo_p_2",
+                "person_full_name": "Ayşe Kaya",
+                "person_company": "Yıldız Liman",
+                "person_tc_number": "12345678902",
+                "action": "OUT", "decision": "OUT",
+                "timestamp": (now - timedelta(hours=1)).isoformat(),
+                "created_at": (now - timedelta(hours=1)).isoformat(),
+                "timestamp_ts": (now - timedelta(hours=1)).timestamp(),
+                "created_at_ts": (now - timedelta(hours=1)).timestamp(),
+                "checked_by_name": "Demo Admin",
                 "gate": "PORT_FACILITY",
-                "duration_sec": 3600
-            }
+                "duration_sec": 14400
+            },
+            {
+                "id": "demo_log_5",
+                "person_id": "demo_p_2", "personnel_id": "demo_p_2",
+                "person_full_name": "Ayşe Kaya",
+                "person_company": "Yıldız Liman",
+                "person_tc_number": "12345678902",
+                "action": "IN", "decision": "IN",
+                "timestamp": (now - timedelta(hours=5)).isoformat(),
+                "created_at": (now - timedelta(hours=5)).isoformat(),
+                "timestamp_ts": (now - timedelta(hours=5)).timestamp(),
+                "created_at_ts": (now - timedelta(hours=5)).timestamp(),
+                "checked_by_name": "Demo Admin",
+                "gate": "PORT_FACILITY"
+            },
+            {
+                "id": "demo_log_6",
+                "person_id": "demo_p_1", "personnel_id": "demo_p_1",
+                "person_full_name": "Mehmet Demir",
+                "person_company": "Demolife İnşaat",
+                "person_tc_number": "12345678901",
+                "action": "OUT", "decision": "OUT",
+                "timestamp": (now - timedelta(hours=2)).isoformat(),
+                "created_at": (now - timedelta(hours=2)).isoformat(),
+                "timestamp_ts": (now - timedelta(hours=2)).timestamp(),
+                "created_at_ts": (now - timedelta(hours=2)).timestamp(),
+                "checked_by_name": "Demo Admin",
+                "gate": "PORT_FACILITY",
+                "duration_sec": 28800
+            },
+            {
+                "id": "demo_log_7",
+                "person_id": "demo_p_1", "personnel_id": "demo_p_1",
+                "person_full_name": "Mehmet Demir",
+                "person_company": "Demolife İnşaat",
+                "person_tc_number": "12345678901",
+                "action": "IN", "decision": "IN",
+                "timestamp": (now - timedelta(hours=10)).isoformat(),
+                "created_at": (now - timedelta(hours=10)).isoformat(),
+                "timestamp_ts": (now - timedelta(hours=10)).timestamp(),
+                "created_at_ts": (now - timedelta(hours=10)).timestamp(),
+                "checked_by_name": "Demo Admin",
+                "gate": "PORT_FACILITY"
+            },
+            {
+                "id": "demo_log_8",
+                "person_id": "demo_p_0", "personnel_id": "demo_p_0",
+                "person_full_name": "Ahmet Yılmaz",
+                "person_company": "Demolife İnşaat",
+                "person_tc_number": "12345678900",
+                "action": "OUT", "decision": "OUT",
+                "timestamp": (now - timedelta(hours=3)).isoformat(),
+                "created_at": (now - timedelta(hours=3)).isoformat(),
+                "timestamp_ts": (now - timedelta(hours=3)).timestamp(),
+                "created_at_ts": (now - timedelta(hours=3)).timestamp(),
+                "checked_by_name": "Demo Admin",
+                "gate": "PORT_FACILITY",
+                "duration_sec": 18000
+            },
         ]
-        return {"data": mock_items, "page": 1, "pages": 1, "total": 2}
+        return {"data": mock_items, "page": 1, "pages": 1, "total": len(mock_items)}
 
     page = max(1, page)
     limit = max(1, min(limit, 200))
     skip = (page - 1) * limit
 
     q = _build_day_query(day, action)
-    action_req = q.pop("_action_filter_requested", None)
 
     # MongoDB natively handles skip, limit and sort much faster
     cursor = db["entry_logs"].find(q).sort([("created_at_ts", -1), ("timestamp_ts", -1)]).skip(skip).limit(limit)
     raw = [_clean(x) async for x in cursor]
-
-    # If action_req is present, we still might need to filter in python 
-    # OR we should have build a better query in _build_day_query.
-    # For now, let's keep the action_req filter if it's there, but usually it's handled in _build_day_query.
-    if action_req:
-        raw = [x for x in raw if _action_of(x) == action_req]
 
     for x in raw:
         x["action"] = _action_of(x)

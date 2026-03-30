@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.db import db
@@ -13,11 +13,16 @@ async def get_expiring_documents(days: int = 30, current_user: dict = Depends(ge
     await require_role(current_user, ["admin", "supervisor"])
 
     now = datetime.now(timezone.utc)
+    threshold_date = (now + timedelta(days=days)).isoformat()
 
     doc_types = await db.document_types.find({}, {"_id": 0}).to_list(100)
     doc_types_map = {dt["id"]: dt for dt in doc_types}
 
-    all_documents = await db.personnel_documents.find({}, {"_id": 0}).to_list(10000)
+    # Sadece threshold içindeki dokümanları çek (10000 yerine)
+    all_documents = await db.personnel_documents.find(
+        {"expiry_date": {"$lte": threshold_date}},
+        {"_id": 0}
+    ).to_list(5000)
 
     # threshold içindekiler (expired dahil) — eski davranış korunur
     expiring_personnel = {}

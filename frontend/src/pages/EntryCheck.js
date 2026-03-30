@@ -64,13 +64,13 @@ const EntryCheck = () => {
       const response = await axios.get(`${API}/personnel/${person.id}`);
       setPersonDetail(response.data);
 
-      // Check current status (isInside?)
+      // Check current status (isInside?) - fetch minimal data
       try {
-        const logsRes = await axios.get(`${API}/entry/logs?limit=200`);
+        const logsRes = await axios.get(`${API}/entry/logs?limit=20`);
         const list = Array.isArray(logsRes.data) ? logsRes.data : (logsRes.data?.data || logsRes.data?.items || []);
         const pid = person.id;
 
-        const my = list.filter((x) => String(x.personnel_id || x.personnel?.id || '') === String(pid))
+        const my = list.filter((x) => String(x.personnel_id || x.person_id || x.personnel?.id || '') === String(pid))
           .sort((a, b) => new Date(getLogTs(b) || 0) - new Date(getLogTs(a) || 0));
 
         if (my.length > 0) {

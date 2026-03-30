@@ -111,9 +111,15 @@ async def make_entry_decision(decision: EntryDecision, current_user: dict = Depe
 
     # 📡 LIVE UPDATE: Broadcast to all connected clients
     try:
+        # Strip MongoDB _id (ObjectId can't be JSON serialized)
+        broadcast_log = {k: v for k, v in log.items() if k != "_id"}
+        broadcast_personnel = None
+        if personnel:
+            broadcast_personnel = {k: v for k, v in personnel.items() if k != "_id"}
+
         await manager.broadcast({
             "type": "NEW_ENTRY",
-            "data": {**log, "personnel": personnel if personnel else None}
+            "data": {**broadcast_log, "personnel": broadcast_personnel}
         })
     except Exception as e:
         print(f"WS Broadcast failed: {e}")

@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -34,7 +35,6 @@ def prepare_turkish_search(q: str):
         elif char.isalpha():
             pattern += f"[{char.lower()}{char.upper()}]"
         else:
-            import re
             pattern += re.escape(char)
             
     return pattern
@@ -90,26 +90,28 @@ async def compute_can_enter_map(personnel_list: list) -> dict:
     if not ids:
         return {}
 
-    # 2) Zorunlu evrakları sadece bu kişiler için çek (batch)
-    # 1000 kişi için çok hızlı olur, ama büyürse de patlamasın diye batch var.
-    docs_by_personnel = {}
+    # 2) Sadece EXPIRED zorunlu evrakları çek (tam liste yerine)
+    # Bu şekilde 100K yerine sadece expired olanlar gelir = çok az bellek
+    expired_personnel_ids = set()
 
     if mandatory_type_ids:
-        MAX_BATCH_SIZE = 500
+        now_iso = now.isoformat()
         mandatory_list = list(mandatory_type_ids)
 
+        MAX_BATCH_SIZE = 500
         for i in range(0, len(ids), MAX_BATCH_SIZE):
             batch_ids = ids[i:i + MAX_BATCH_SIZE]
-            docs = await db.personnel_documents.find(
+            expired_docs = await db.personnel_documents.find(
                 {
                     "personnel_id": {"$in": batch_ids},
                     "document_type_id": {"$in": mandatory_list},
+                    "expiry_date": {"$lt": now_iso},
                 },
-                {"_id": 0, "personnel_id": 1, "expiry_date": 1, "document_type_id": 1},
-            ).to_list(100000)
+                {"_id": 0, "personnel_id": 1},
+            ).to_list(len(batch_ids))
 
-            for d in docs:
-                docs_by_personnel.setdefault(d["personnel_id"], []).append(d)
+            for d in expired_docs:
+                expired_personnel_ids.add(d["personnel_id"])
 
     # 3) Sonuç
     result = {}
@@ -124,17 +126,7 @@ async def compute_can_enter_map(personnel_list: list) -> dict:
             result[pid] = False
             continue
 
-        # zorunlu evrak expiry kontrol
-        has_expired = False
-        for d in docs_by_personnel.get(pid, []):
-            expiry = parse_dt_safe(d.get("expiry_date"))
-            if not expiry:
-                has_expired = True
-                break
-            if expiry < now:
-                has_expired = True
-                break
-
-        result[pid] = (not has_expired)
+        # zorunlu evrak expiry kontrol (önceden toplu çekildi)
+        result[pid] = pid not in expired_personnel_ids
 
     return result

@@ -45,18 +45,29 @@ const PersonnelDetail = () => {
     notes: '',
   });
 
+  const fetchWithRetry = useCallback(async (url, retries = 3, delay = 500) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await axios.get(url, { timeout: 10000 });
+        return res;
+      } catch (err) {
+        if (i === retries - 1) throw err;
+        await new Promise(r => setTimeout(r, delay * (i + 1)));
+      }
+    }
+  }, []);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
+
+    // 1) Personel detay - bu kritik, retry ile dene
+    let detailData = null;
     try {
-      const [detailRes, typesRes] = await Promise.all([
-        axios.get(`${API}/personnel/${id}`),
-        axios.get(`${API}/documents/types`),
-      ]);
+      const detailRes = await fetchWithRetry(`${API}/personnel/${id}`);
+      detailData = detailRes.data;
+      setData(detailData);
 
-      setData(detailRes.data);
-      setDocumentTypes(typesRes.data);
-
-      const p = detailRes.data.personnel;
+      const p = detailData.personnel;
       setEditForm({
         full_name: p.full_name || '',
         tc_number: p.tc_number || '',
@@ -68,13 +79,24 @@ const PersonnelDetail = () => {
         assignment_end: p.assignment_end || '',
       });
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      console.error('Failed to fetch personnel detail:', error);
       toast.error(t('failedToLoadData'));
       setData(null);
-    } finally {
       setLoading(false);
+      return;
     }
-  }, [id, t]);
+
+    // 2) Doküman tipleri - başarısız olursa personel yine gösterilir
+    try {
+      const typesRes = await fetchWithRetry(`${API}/documents/types`);
+      setDocumentTypes(typesRes.data || []);
+    } catch (error) {
+      console.error('Failed to fetch document types:', error);
+      setDocumentTypes([]);
+    }
+
+    setLoading(false);
+  }, [id, t, fetchWithRetry]);
 
   useEffect(() => {
     fetchData();

@@ -1,10 +1,15 @@
 from datetime import datetime, timezone, timedelta
+import time
 
 from fastapi import APIRouter, Depends
 from app.db import db, DEMO_MODE
 from app.deps import get_current_user
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+# ── 30-saniye cache: Aynı anda birden çok kullanıcı = aynı DB sorgusu bir kez ──
+_stats_cache = {"data": None, "ts": 0}
+CACHE_TTL = 30  # saniye
 
 
 @router.get("/stats")
@@ -19,6 +24,11 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
             "cannot_enter": 6,
             "inside_count": 12
         }
+
+    # Cache kontrolü
+    now_ts = time.time()
+    if _stats_cache["data"] and (now_ts - _stats_cache["ts"]) < CACHE_TTL:
+        return _stats_cache["data"]
 
     total_personnel = await db.personnel.count_documents({})
 
@@ -85,46 +95,48 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         else:
             can_enter += 1
 
-    return {
+    result = {
         "total_personnel": total_personnel,
         "total_entries_today": total_entries_today,
         "approved_today": approved_today,
         "rejected_today": rejected_today,
         "can_enter": can_enter,
-        "can_enter": can_enter,
         "cannot_enter": cannot_enter,
         "inside_count": await _calculate_inside_count()
     }
 
-async def _calculate_inside_count() -> int:
-    # 1. Get logs from last 24 hours (to capture active shifts)
-    # Ideally we should scan further back, but for performance 24h-48h is typical window.
-    # If someone stayed more than 24h, they might fall off this count, which is acceptable for "live" dashboard.
-    lookback = datetime.now(timezone.utc) - timedelta(hours=24)
-    query = {"timestamp": {"$gte": lookback.isoformat()}}
-    
-    # Snapshot of person_status
-    status_map = {} # pid -> "IN" | "OUT"
+    # Cache'e kaydet
+    _stats_cache["data"] = result
+    _stats_cache["ts"] = time.time()
 
-    # Fetch all logs for last 24h (asc by time)
-    # We use a cursor processing to be memory efficient
-    cursor = db.entry_logs.find(query).sort("timestamp_ts", 1)
+    return result
+
+async def _calculate_inside_count() -> int:
+    # Use timestamp_ts (numeric epoch) for reliable 24h lookback
+    lookback_ts = (datetime.now(timezone.utc) - timedelta(hours=24)).timestamp()
+    
+    # Try timestamp_ts first (numeric, reliable), fallback to string
+    query = {"$or": [
+        {"timestamp_ts": {"$gte": lookback_ts}},
+        {"created_at_ts": {"$gte": lookback_ts}},
+    ]}
+    
+    status_map = {}  # pid -> "IN" | "OUT"
+
+    cursor = db.entry_logs.find(query).sort([("timestamp_ts", 1), ("created_at_ts", 1)])
     
     async for log in cursor:
         pid = log.get("person_id") or log.get("personnel_id")
         if not pid: 
             continue
         
-        # Normalize action
         action_raw = log.get("action") or log.get("decision") or ""
-        # _to_action helpers are in entry_logs.py, duplicating simple version here to avoid circular imports or refactor overhead
         a = str(action_raw).upper().strip()
-        final_action = "OUT"
-        if a in ["IN", "APPROVED", "ALLOW", "ALLOWED", "ACCEPTED", "OK"]:
-            final_action = "IN"
-            
-        status_map[pid] = final_action
+        
+        if a in ("IN", "APPROVED", "ALLOW", "ALLOWED", "ACCEPTED", "OK"):
+            status_map[pid] = "IN"
+        elif a in ("OUT", "REJECTED", "DENY", "DENIED", "NOT_OK", "NO"):
+            status_map[pid] = "OUT"
 
-    # Count how many are 'IN'
     count = sum(1 for status in status_map.values() if status == "IN")
     return count

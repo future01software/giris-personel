@@ -98,6 +98,17 @@ async def ensure_indexes():
     # Compound index for person + timestamp queries
     try: await db.entry_logs.create_index([("person_id", 1), ("created_at_ts", -1)])
     except Exception: pass
+    # Compound index for action + timestamp (inside count, dashboard filtering)
+    try: await db.entry_logs.create_index([("action", 1), ("timestamp_ts", -1)])
+    except Exception: pass
 
     try: await db.document_types.create_index("id", unique=True)
+    except Exception: pass
+
+    # Text index for personnel search (faster than $regex)
+    try: await db.personnel.create_index([
+        ("full_name", "text"),
+        ("tc_number", "text"),
+        ("company", "text")
+    ], default_language="turkish")
     except Exception: pass

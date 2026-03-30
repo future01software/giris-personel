@@ -63,7 +63,16 @@ export const WebSocketProvider = ({ children }) => {
 
         connect();
 
+        // Reconnect when tab becomes visible again
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible' && (!ws.current || ws.current.readyState !== WebSocket.OPEN)) {
+                connect();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+
         return () => {
+            document.removeEventListener('visibilitychange', handleVisibility);
             if (ws.current) {
                 ws.current.close();
             }
