@@ -113,10 +113,7 @@ const Alerts = () => {
             {t('back')}
           </Button>
 
-          <h1
-            className="text-2xl font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tight"
-            style={{ fontFamily: 'Oswald, sans-serif' }}
-          >
+          <h1 className="page-title">
             {t('expiringDocuments')}
           </h1>
         </div>

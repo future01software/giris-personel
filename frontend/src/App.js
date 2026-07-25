@@ -183,7 +183,7 @@ const AnimatedRoutes = () => {
           <Route
             path="/entry-logs"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
+              <ProtectedRoute allowedRoles={['admin', 'supervisor', 'security']}>
                 <PageTransition>
                   <EntryLogs />
                 </PageTransition>
@@ -194,7 +194,7 @@ const AnimatedRoutes = () => {
           <Route
             path="/entry-logs/search"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'supervisor']}>
+              <ProtectedRoute allowedRoles={['admin', 'supervisor', 'security']}>
                 <PageTransition>
                   <EntryLogsSearch />
                 </PageTransition>

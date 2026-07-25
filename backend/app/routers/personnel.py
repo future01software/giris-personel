@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 import pandas as pd
 import io
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 
 from app.models import PersonnelCreate, BulkDeleteRequest
 from app.db import db, DEMO_MODE
@@ -9,6 +10,84 @@ from app.deps import get_current_user, require_role
 from app.utils import new_id, compute_can_enter_map, prepare_turkish_search
 
 router = APIRouter(prefix="/personnel", tags=["personnel"])
+TR_TZ = ZoneInfo("Europe/Istanbul")
+
+
+def _log_timestamp(log: dict) -> float:
+    for key in ("timestamp_ts", "created_at_ts"):
+        value = log.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+    for key in ("timestamp", "created_at"):
+        value = log.get(key)
+        if value:
+            try:
+                return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+            except (TypeError, ValueError):
+                pass
+    return 0.0
+
+
+def _log_action(log: dict) -> str:
+    value = str(log.get("action") or log.get("decision") or "").strip().upper()
+    if value in ("IN", "APPROVED", "ALLOW", "ALLOWED", "ACCEPTED", "OK"):
+        return "IN"
+    if value in ("OUT", "REJECTED", "DENY", "DENIED", "NOT_OK", "NO"):
+        return "OUT"
+    return ""
+
+
+async def _activity_summary(personnel_id: str) -> dict:
+    query = {"$or": [{"personnel_id": personnel_id}, {"person_id": personnel_id}]}
+    logs = await db.entry_logs.find(query, {"_id": 0}).to_list(5000)
+    logs.sort(key=_log_timestamp)
+
+    now_ts = datetime.now(timezone.utc).timestamp()
+    today_start = datetime.now(TR_TZ).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    last_entry = None
+    last_exit = None
+    last_gate = None
+    last_gate_ts = 0.0
+    open_entry_ts = None
+    today_total_sec = 0
+
+    for log in logs:
+        ts = _log_timestamp(log)
+        action = _log_action(log)
+        if not ts or not action:
+            continue
+
+        gate = log.get("gate") or log.get("security_unit")
+        if gate and ts >= last_gate_ts:
+            last_gate = gate
+            last_gate_ts = ts
+
+        if action == "IN":
+            last_entry = ts
+            open_entry_ts = ts
+        elif action == "OUT":
+            last_exit = ts
+            if open_entry_ts is not None:
+                overlap_start = max(open_entry_ts, today_start)
+                overlap_end = min(ts, now_ts)
+                if overlap_end > overlap_start:
+                    today_total_sec += int(overlap_end - overlap_start)
+            open_entry_ts = None
+
+    if open_entry_ts is not None:
+        overlap_start = max(open_entry_ts, today_start)
+        if now_ts > overlap_start:
+            today_total_sec += int(now_ts - overlap_start)
+
+    def iso(ts):
+        return datetime.fromtimestamp(ts, timezone.utc).isoformat() if ts else None
+
+    return {
+        "last_entry_at": iso(last_entry),
+        "last_exit_at": iso(last_exit),
+        "today_inside_seconds": today_total_sec,
+        "last_gate": last_gate,
+    }
 
 
 @router.post("")
@@ -25,6 +104,8 @@ async def create_personnel(data: PersonnelCreate, current_user: dict = Depends(g
         "photo_url": data.photo_url,
         "assignment_start": data.assignment_start,
         "assignment_end": data.assignment_end,
+        "entry_blocked": data.entry_blocked,
+        "entry_block_reason": data.entry_block_reason,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.personnel.insert_one(personnel_doc)
@@ -100,6 +181,8 @@ async def get_personnel(
             "photo_url": 1,
             "assignment_start": 1,
             "assignment_end": 1,
+            "entry_blocked": 1,
+            "entry_block_reason": 1,
             "created_at": 1
         }
         
@@ -119,7 +202,10 @@ async def get_personnel(
         }
 
     # status=can/cannot
-    all_candidates = await db.personnel.find(query, {"_id": 0, "id": 1, "assignment_end": 1}).sort("created_at", -1).to_list(200000)
+    all_candidates = await db.personnel.find(
+        query,
+        {"_id": 0, "id": 1, "assignment_start": 1, "assignment_end": 1, "entry_blocked": 1}
+    ).sort("created_at", -1).to_list(200000)
     can_map = await compute_can_enter_map(all_candidates)
 
     want = True if status == "can" else False
@@ -266,7 +352,15 @@ async def get_personnel_detail(personnel_id: str, current_user: dict = Depends(g
             "documents": demo_docs,
             "overall_status": overall_status,
             "status_reason": status_reason,
-            "assignment_expired": assignment_expired
+            "assignment_expired": assignment_expired,
+            "assignment_not_started": False,
+            "restriction_reasons": [{"code": "assignment_expired"}] if assignment_expired else [],
+            "activity_summary": {
+                "last_entry_at": None,
+                "last_exit_at": None,
+                "today_inside_seconds": 0,
+                "last_gate": None,
+            },
         }
 
     personnel = await db.personnel.find_one({"id": personnel_id}, {"_id": 0})
@@ -302,38 +396,82 @@ async def get_personnel_detail(personnel_id: str, current_user: dict = Depends(g
                 "days_until_expiry": days_until_expiry
             })
 
+    restriction_reasons = []
     assignment_expired = False
+    assignment_not_started = False
+    if personnel.get("assignment_start"):
+        assignment_start = datetime.fromisoformat(personnel["assignment_start"]) if isinstance(personnel["assignment_start"], str) else personnel["assignment_start"]
+        if assignment_start.tzinfo is None:
+            assignment_start = assignment_start.replace(tzinfo=timezone.utc)
+        assignment_not_started = assignment_start > now
+        if assignment_not_started:
+            restriction_reasons.append({"code": "assignment_not_started"})
+
     if personnel.get("assignment_end"):
         assignment_end = datetime.fromisoformat(personnel["assignment_end"]) if isinstance(personnel["assignment_end"], str) else personnel["assignment_end"]
         if assignment_end.tzinfo is None:
             assignment_end = assignment_end.replace(tzinfo=timezone.utc)
         if assignment_end < now:
             assignment_expired = True
+            restriction_reasons.append({"code": "assignment_expired"})
 
-    if assignment_expired:
+    if personnel.get("entry_blocked") is True or personnel.get("is_blocked") is True or personnel.get("blocked") is True:
+        restriction_reasons.append({
+            "code": "admin_blocked",
+            "detail": personnel.get("block_reason") or personnel.get("entry_block_reason") or ""
+        })
+
+    uploaded_type_ids = {d.get("document_type_id") for d in enriched_docs}
+    missing_mandatory = [
+        dt for dt in doc_types
+        if dt.get("is_mandatory") and dt.get("id") not in uploaded_type_ids
+    ]
+    if missing_mandatory:
+        restriction_reasons.append({
+            "code": "mandatory_document_missing",
+            "documents": [dt.get("name_tr") or dt.get("name_en") or "" for dt in missing_mandatory]
+        })
+
+    expired_mandatory = [
+        d for d in enriched_docs
+        if d.get("document_type", {}).get("is_mandatory") and d.get("status") == "expired"
+    ]
+    if expired_mandatory:
+        restriction_reasons.append({
+            "code": "document_expired",
+            "documents": [
+                d.get("document_type", {}).get("name_tr")
+                or d.get("document_type", {}).get("name_en")
+                or ""
+                for d in expired_mandatory
+            ]
+        })
+
+    if restriction_reasons:
         overall_status = "red"
-        status_reason = "assignment_expired"
+        status_reason = restriction_reasons[0]["code"]
     else:
         mandatory_docs = [d for d in enriched_docs if d["document_type"]["is_mandatory"]]
-        has_expired = any(d["status"] == "expired" for d in mandatory_docs)
         has_warning = any(d["status"] == "warning" for d in mandatory_docs)
 
-        if has_expired:
-            overall_status = "red"
-            status_reason = "expired_documents"
-        elif has_warning:
+        if has_warning:
             overall_status = "yellow"
             status_reason = "warning_documents"
         else:
             overall_status = "green"
             status_reason = "all_valid"
 
+    activity_summary = await _activity_summary(personnel_id)
+
     return {
         "personnel": personnel,
         "documents": enriched_docs,
         "overall_status": overall_status,
         "status_reason": status_reason,
-        "assignment_expired": assignment_expired
+        "assignment_expired": assignment_expired,
+        "assignment_not_started": assignment_not_started,
+        "restriction_reasons": restriction_reasons,
+        "activity_summary": activity_summary,
     }
 
 

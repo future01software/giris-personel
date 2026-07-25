@@ -116,7 +116,7 @@ const Users = () => {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-tight">
+        <h1 className="page-title">
           {t('users')}
         </h1>
 

@@ -114,7 +114,8 @@ def _build_day_query(day: Optional[str], action: Optional[str]) -> Dict[str, Any
 
 # =========================
 # ✅ UPDATED: SEARCH (lookback + duration_sec)
-# ==================@router.get("/search")
+# =========================
+@router.get("/search")
 async def search_entry_logs(
     q: str,
     day: Optional[str] = None,          # YYYY-MM-DD opsiyonel
@@ -550,7 +551,7 @@ async def monthly_report_excel(
     month: int,
     current_user: dict = Depends(get_current_user),
 ):
-    require_role(current_user, ["admin", "security"])
+    require_role(current_user, ["admin"])
 
     # 1. Bounds (UTC timestamps for filtering)
     start_dt = datetime(year, month, 1, 0, 0, 0, tzinfo=TR_TZ)

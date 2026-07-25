@@ -60,6 +60,8 @@ class PersonnelCreate(BaseModel):
     photo_url: Optional[str] = None
     assignment_start: Optional[str] = None
     assignment_end: Optional[str] = None
+    entry_blocked: bool = False
+    entry_block_reason: Optional[str] = None
 
 
 class DocumentType(BaseModel):

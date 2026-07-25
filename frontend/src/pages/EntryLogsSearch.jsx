@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 // import Layout from '../components/Layout';
 import { Search, ArrowLeft, Clock, LogIn, LogOut } from 'lucide-react';
 import axios from 'axios';
+import LocalizedDateInput from '../components/LocalizedDateInput';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -173,7 +174,7 @@ const EntryLogsSearch = () => {
 
           <Search className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-normal">
+            <h1 className="page-title">
               {t('logsSearchTitle')}
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
@@ -218,8 +219,7 @@ const EntryLogsSearch = () => {
               {t('dayFilter')}
             </label>
 
-            <input
-              type="date"
+            <LocalizedDateInput
               value={day}
               onChange={(e) => setDay(e.target.value)}
               disabled={!useDayFilter}
