@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router-dom';
 // import Layout from '../components/Layout';
 import { Search, Clock, LogIn, LogOut, Shield, MapPin, User, FileDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { toTurkishUpperCase } from '../utils/textHelpers';
+import { useAuth } from '../contexts/AuthContext';
+import LocalizedDateInput from '../components/LocalizedDateInput';
 import axios from 'axios';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -34,6 +35,8 @@ const normalizeAction = (log) => {
 const EntryLogs = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
 
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +59,7 @@ const EntryLogs = () => {
   const [reportLoading, setReportLoading] = useState(false);
 
   const handleDownloadReport = async () => {
+    if (!isAdmin) return;
     setReportLoading(true);
     try {
       const response = await axios.get(`${API}/entry-logs/monthly-report-excel`, {
@@ -164,8 +168,8 @@ const EntryLogs = () => {
           <div className="flex items-center gap-3">
             <Clock className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <div>
-              <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-normal uppercase">
-                {i18n.language === 'tr' ? toTurkishUpperCase(t('entryExitRecords')) : t('entryExitRecords')}
+              <h1 className="page-title">
+                {t('entryExitRecords')}
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                 {t('showingLast24Hours')}
@@ -174,13 +178,15 @@ const EntryLogs = () => {
           </div>
 
           <div className="flex gap-2">
-            <button
-              onClick={() => setIsReportOpen(true)}
-              className="px-5 py-2.5 bg-emerald-600 border border-emerald-600 text-white rounded-full hover:bg-emerald-700 transition-all shadow-sm hover:shadow-md flex items-center gap-2 text-sm font-bold"
-            >
-              <FileDown className="w-4 h-4" />
-              {t('downloadReport')}
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setIsReportOpen(true)}
+                className="px-5 py-2.5 bg-emerald-600 border border-emerald-600 text-white rounded-full hover:bg-emerald-700 transition-all shadow-sm hover:shadow-md flex items-center gap-2 text-sm font-bold"
+              >
+                <FileDown className="w-4 h-4" />
+                {t('downloadReport')}
+              </button>
+            )}
             <button
               onClick={() => navigate('/entry-logs/search')}
               className="px-5 py-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 rounded-full hover:bg-slate-50 dark:hover:bg-white/10 transition-all shadow-sm hover:shadow-md flex items-center gap-2 text-sm font-bold"
@@ -234,8 +240,7 @@ const EntryLogs = () => {
 
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('day')}:</span>
-              <input
-                type="date"
+              <LocalizedDateInput
                 value={day}
                 onChange={(e) => setDay(e.target.value)}
                 className="px-3 py-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg text-slate-900 dark:text-slate-100 text-sm"
@@ -383,7 +388,8 @@ const EntryLogs = () => {
         )}
       </div>
 
-      {/* Report Dialog */}
+      {/* Report Dialog - admins only */}
+      {isAdmin && (
       <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
         <DialogContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 sm:max-w-[400px]">
           <DialogHeader>
@@ -438,6 +444,7 @@ const EntryLogs = () => {
           </div>
         </DialogContent>
       </Dialog>
+      )}
 
     </>
     //    </Layout>

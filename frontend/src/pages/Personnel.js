@@ -6,7 +6,6 @@ import { Plus, Trash2, Eye, Upload, Download, Search, X, ChevronRight } from 'lu
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
-import { toTurkishUpperCase } from '../utils/textHelpers';
 import { Skeleton } from '../components/ui/skeleton';
 import axios from 'axios';
 
@@ -369,8 +368,8 @@ const Personnel = () => {
     <div className="space-y-4">
       {/* Header - Dashboard Style */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-tight">
-          {i18n.language === 'tr' ? toTurkishUpperCase(t('personnel')) : t('personnel')}
+        <h1 className="page-title">
+          {t('personnel')}
         </h1>
       </div>
 

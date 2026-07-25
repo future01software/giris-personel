@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import LocalizedDateInput from '../components/LocalizedDateInput';
 import { toast } from 'sonner';
 import axios from 'axios';
 
@@ -115,10 +116,7 @@ const PersonnelAdd = () => {
           <ArrowLeft className="w-5 h-5" />
         </Button>
 
-        <h1
-          className="text-2xl font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-tight"
-          style={{ fontFamily: 'Oswald, sans-serif' }}
-        >
+        <h1 className="page-title">
           Yeni Personel Ekle
         </h1>
       </div>
@@ -126,10 +124,7 @@ const PersonnelAdd = () => {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Personnel Info Card */}
         <div className="bg-white dark:bg-[#080808] rounded-xl border border-slate-200 dark:border-white/5 shadow-sm p-6">
-          <h3
-            className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 uppercase"
-            style={{ fontFamily: 'Oswald, sans-serif' }}
-          >
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-4">
             {t('personnelInfo')}
           </h3>
 
@@ -199,8 +194,7 @@ const PersonnelAdd = () => {
 
             <div>
               <Label className={`uppercase text-xs tracking-wider ${labelDark}`}>{t('assignmentStart')}</Label>
-              <Input
-                type="date"
+              <LocalizedDateInput
                 value={formData.assignment_start}
                 onChange={(e) => setFormData({ ...formData, assignment_start: e.target.value })}
                 className={inputDark}
@@ -210,8 +204,7 @@ const PersonnelAdd = () => {
 
             <div>
               <Label className={`uppercase text-xs tracking-wider ${labelDark}`}>{t('assignmentEnd')}</Label>
-              <Input
-                type="date"
+              <LocalizedDateInput
                 value={formData.assignment_end}
                 onChange={(e) => setFormData({ ...formData, assignment_end: e.target.value })}
                 className={inputDark}
@@ -223,10 +216,7 @@ const PersonnelAdd = () => {
 
         {/* Documents Card (Info style) */}
         <div className="bg-blue-50 dark:bg-[#080808] rounded-xl border border-blue-200 dark:border-white/5 p-6">
-          <h3
-            className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 uppercase"
-            style={{ fontFamily: 'Oswald, sans-serif' }}
-          >
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-4">
             {t('documents')} ({t('optional')})
           </h3>
 
@@ -254,8 +244,7 @@ const PersonnelAdd = () => {
                     {type.is_mandatory && <span className="text-red-600 dark:text-rose-300 ml-1">*</span>}
                   </Label>
 
-                  <Input
-                    type="date"
+                  <LocalizedDateInput
                     value={documentDates[type.id] || ''}
                     onChange={(e) => setDocumentDates({ ...documentDates, [type.id]: e.target.value })}
                     className={`${inputDark} mt-2`}

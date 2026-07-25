@@ -121,7 +121,7 @@ html.theme-transitioning img {
 
   body {
     @apply bg-slate-200 dark:bg-background text-foreground;
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
     padding-bottom: env(safe-area-inset-bottom);
   }
 
@@ -135,7 +135,7 @@ html.theme-transitioning img {
   }
 
   .shell-container {
-    @apply h-screen w-screen p-1 md:p-1.5 bg-slate-100 dark:bg-background;
+    @apply h-[100dvh] w-full p-0 overflow-hidden bg-slate-100 dark:bg-background;
   }
 
   .shell-inner {
@@ -148,6 +148,10 @@ html.theme-transitioning img {
 
   .content-card {
     @apply flex-1 bg-white dark:bg-[#0A0A0A] rounded-[1.5rem] md:rounded-[1.75rem] shadow-soft overflow-y-auto border border-transparent dark:border-white/5;
+  }
+
+  .page-title {
+    @apply flex min-h-10 items-center border-l-[3px] border-[#0a4f83] pl-3 text-xl font-semibold tracking-tight text-slate-800 dark:border-sky-400 dark:text-slate-100;
   }
 
   /* Pastel Card Backgrounds */
@@ -218,6 +222,29 @@ html.theme-transitioning img {
     line-height: 20px;
     display: flex;
     align-items: center;
+  }
+
+  /* Keep native date controls readable in both themes. */
+  input[type="date"] {
+    color-scheme: light;
+  }
+
+  .dark input[type="date"] {
+    color-scheme: dark;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.8;
+  }
+
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: none;
+    opacity: 1;
+  }
+
+  .localized-date-input::-webkit-datetime-edit {
+    color: transparent;
   }
 }
 

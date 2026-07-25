@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { motion } from 'framer-motion';
-import { Globe, Sun, Moon, Eye, EyeOff, XCircle, CheckCircle, Lock, Mail, Clock } from 'lucide-react';
+import { Sun, Moon, Eye, EyeOff, XCircle, CheckCircle, Lock, Mail, Clock, ShieldCheck } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -87,31 +87,21 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#050505] p-4 font-['Outfit',_sans-serif] transition-colors duration-500">
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] dark:bg-slate-950 p-4 font-['Segoe_UI',_Arial,_sans-serif] transition-colors duration-300">
 
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#F8FAFC] via-[#F8FAFC]/60 to-[#F8FAFC] dark:from-[#050505] dark:via-[#050505]/40 dark:to-[#050505]" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#F8FAFC]/50 via-transparent to-[#F8FAFC]/50 dark:from-[#050505]/50 dark:via-transparent dark:to-[#050505]/50" />
-        <div className="absolute inset-0 grid grid-cols-3 grid-rows-2 gap-4 p-8 z-10 opacity-[0.15] dark:opacity-[0.25]">
-          {[
-            '/assets/landing/port.png',
-            '/assets/landing/construction.png',
-            '/assets/landing/containers.png',
-            '/assets/landing/crane.png',
-            '/assets/landing/warehouse.png',
-            '/assets/landing/port.png',
-          ].map((src, i) => (
-            <div key={i} className="rounded-2xl overflow-hidden shadow-lg">
-              <img src={src} alt="" className="w-full h-full object-cover grayscale dark:brightness-75" loading="lazy" />
-            </div>
-          ))}
-        </div>
+        <img
+          src="/assets/landing/containers.png"
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover grayscale opacity-35 dark:opacity-15"
+        />
+        <div className="absolute inset-0 bg-white/65 dark:bg-slate-950/80 backdrop-blur-[1px]" />
       </div>
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative z-10 w-full max-w-[420px] bg-white dark:bg-[#0A0A0A] rounded-[2.5rem] shadow-[0_20px_60px_rgba(0,0,0,0.06)] border border-slate-100 dark:border-white/5 p-8 md:p-10"
+        className="relative z-10 w-full max-w-[440px] bg-white dark:bg-[#0a0f12] rounded-[28px] shadow-2xl border border-slate-200/80 dark:border-white/5 p-8 md:p-10"
       >
         <div className="absolute top-6 right-6 flex gap-1.5">
           <button onClick={toggleTheme} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 dark:bg-white/5 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all border border-slate-100 dark:border-white/5">
@@ -122,19 +112,21 @@ const Login = () => {
           </button>
         </div>
 
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 pt-3">
           <div className="flex flex-col items-center gap-3 mb-4">
-            <img src="/logo.png" alt="Clear2Work" className="w-14 h-14 object-contain dark:brightness-0 dark:invert transition-transform duration-500 hover:scale-105" />
-            <span className="text-3xl font-['Pacifico',_cursive] text-slate-800 dark:text-white">
-              Clear<span className="text-slate-500 dark:text-slate-400 ml-1">2Work</span>
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-[#0b3b68]/15 bg-[#eef5fb] text-[#0a3b67] dark:border-sky-300/15 dark:bg-slate-900 dark:text-sky-300">
+              <ShieldCheck className="h-8 w-8" strokeWidth={1.9} />
+            </div>
+            <span className="text-[34px] font-bold leading-none tracking-normal text-[#17324d] dark:text-white">
+              Clear<span className="text-[#0a4f83] dark:text-sky-300">2</span><span className="text-[#526b82] dark:text-slate-300">Work</span>
             </span>
           </div>
 
-          <div className="inline-block px-3 py-0.5 rounded-full bg-slate-50 dark:bg-white/5 text-slate-700 dark:text-slate-300 text-[9px] font-bold tracking-widest border border-slate-100 dark:border-white/10 mb-3" lang="en" style={{ textTransform: 'uppercase' }}>
+          <div className="inline-block px-3 py-1.5 rounded bg-[#f6f8fa] dark:bg-[#152235] text-[#42576a] dark:text-[#b7c7d6] text-[9px] font-bold tracking-[0.08em] border border-[#d8e0e7] dark:border-[#304257] mb-4" lang="en" style={{ textTransform: 'uppercase' }}>
             {t('industrialSystem')}
           </div>
 
-          <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{t('login')}</h2>
+          <h2 className="text-[26px] font-black text-slate-900 dark:text-white tracking-tight">{t('login')}</h2>
         </div>
 
         <div className="space-y-2.5 mb-6">
@@ -167,7 +159,7 @@ const Login = () => {
               autoCorrect="off"
               autoComplete="username"
               spellCheck="false"
-              className="h-11 rounded-xl bg-white dark:bg-black/40 border-slate-200 dark:border-white/10 focus:ring-1 focus:ring-slate-900 dark:focus:ring-white transition-all text-sm px-4"
+              className="h-12 rounded-xl bg-[#eef2f6] dark:bg-[#1e293b] border-slate-200 dark:border-white/10 focus:ring-2 focus:ring-sky-400/30 transition-all text-sm px-4"
             />
           </div>
 
@@ -185,7 +177,7 @@ const Login = () => {
                 autoCorrect="off"
                 autoComplete="current-password"
                 spellCheck="false"
-                className="h-11 rounded-xl bg-white dark:bg-black/40 border-slate-200 dark:border-white/10 focus:ring-1 focus:ring-slate-900 dark:focus:ring-white transition-all text-sm px-4 pr-10"
+                className="h-12 rounded-xl bg-[#eef2f6] dark:bg-[#1e293b] border-slate-200 dark:border-white/10 focus:ring-2 focus:ring-sky-400/30 transition-all text-sm px-4 pr-10"
               />
               <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -193,7 +185,7 @@ const Login = () => {
             </div>
           </div>
 
-          <Button type="submit" disabled={loading} className="w-full h-12 rounded-2xl bg-slate-900 dark:bg-white dark:text-slate-950 text-white text-lg font-black shadow-lg dark:shadow-white/5 hover:scale-[1.02] active:scale-95 transition-all mt-2">
+          <Button type="submit" disabled={loading} className="w-full h-12 rounded-xl bg-[#0b4f87] hover:bg-[#083d69] dark:bg-sky-700 dark:hover:bg-sky-600 text-white text-lg font-black shadow-lg shadow-sky-950/10 active:scale-[0.98] transition-all mt-2">
             {loading ? t('loginLoading') : t('login')}
           </Button>
         </form>
@@ -227,10 +219,6 @@ const Login = () => {
         </DialogContent>
       </Dialog>
 
-      <style dangerouslySetInnerHTML={{
-        __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Pacifico&family=Outfit:wght@400;500;600;700;800;900&display=swap');
-      `}} />
     </div>
   );
 };

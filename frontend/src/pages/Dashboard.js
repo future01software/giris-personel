@@ -197,21 +197,21 @@ const Dashboard = () => {
   const StatCard = React.memo(({ title, value, icon: Icon, onClick, bgClass, iconColorClass, textColorClass }) => (
     <div
       onClick={onClick}
-      className={`relative overflow-hidden rounded-[2.5rem] p-6 transition-all duration-300 group ${onClick ? 'cursor-pointer' : ''} ${bgClass} border border-transparent dark:border-white/5 hover:dark:border-white/10`}
+      className={`relative overflow-hidden rounded-2xl p-5 transition-all duration-200 group ${onClick ? 'cursor-pointer' : ''} ${bgClass} border border-slate-100 dark:border-white/5 hover:border-slate-200 hover:shadow-sm`}
     >
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4">
         {/* Circular Icon Container */}
-        <div className="w-16 h-16 rounded-full bg-white dark:bg-slate-800/20 backdrop-blur-md flex items-center justify-center flex-shrink-0 shadow-lg shadow-black/5 group-hover:scale-110 transition-transform duration-300">
-          <Icon className={`w-7 h-7 stroke-[2.5] ${iconColorClass}`} />
+        <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800/40 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <Icon className={`w-6 h-6 stroke-[2.2] ${iconColorClass}`} />
         </div>
 
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex flex-col">
-            <span className={`text-2xl font-bold tracking-tight ${textColorClass}`}>
+            <span className={`text-xl font-bold tracking-tight ${textColorClass}`}>
               {value}
             </span>
-            <span className={`text-sm font-medium opacity-60 ${textColorClass}`}>
+            <span className={`text-xs font-semibold opacity-70 ${textColorClass}`}>
               {title}
             </span>
           </div>
@@ -222,13 +222,13 @@ const Dashboard = () => {
 
   return (
     <>
-      <div className="space-y-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-8">
+      <div className="space-y-6 py-1">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">
+            <h1 className="page-title">
               {t('dashboard')}
             </h1>
-            <p className="text-slate-400 dark:text-slate-500 font-medium mt-2 flex items-center gap-2">
+            <p className="text-slate-400 dark:text-slate-500 text-sm font-medium mt-1.5 flex items-center gap-2">
               <Calendar className="w-4 h-4" />
               {new Date().toLocaleDateString(i18n.language, {
                 weekday: 'long',
@@ -240,10 +240,10 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {loading ? (
             Array(4).fill(0).map((_, i) => (
-              <Skeleton key={i} className="h-36 rounded-2xl" />
+              <Skeleton key={i} className="h-24 rounded-2xl" />
             ))
           ) : (
             <>
@@ -289,13 +289,13 @@ const Dashboard = () => {
 
         <div className="grid grid-cols-1 gap-6 pb-6">
           <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#080808] p-4 lg:p-6 rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-premium">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#080808] p-4 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="p-2 sm:p-3 bg-blue-50 dark:bg-white/5 rounded-2xl text-blue-600 dark:text-blue-400">
+                <div className="p-2.5 bg-blue-50 dark:bg-white/5 rounded-xl text-blue-600 dark:text-blue-400">
                   <Clock className="w-5 h-5 sm:w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     {t('entryExitLogsTitle')}
                     <span className="flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full bg-slate-900 text-white text-[10px] font-bold">
                       {recentEntries.length}

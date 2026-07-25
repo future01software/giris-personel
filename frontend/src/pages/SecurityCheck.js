@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation, Trans } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
-import { Search, MapPin, User, DoorOpen, DoorClosed, LogOut, Moon, Sun, Clock, FileText, CheckCircle, XCircle, AlertTriangle, Filter, Calendar, ChevronRight, Bell } from 'lucide-react';
+import { Search, MapPin, User, DoorOpen, DoorClosed, LogIn, LogOut, Moon, Sun, Clock, FileText, CheckCircle, XCircle, AlertTriangle, Filter, Calendar, ChevronRight, Bell } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -30,6 +30,19 @@ const formatDuration = (ms, t) => {
   if (days > 0) return `${days}${t('daysShort') || 'd'} ${pad2(hours)}${t('hoursUnit')} ${pad2(mins)}${t('minutesUnit')}`;
   if (hours > 0) return `${hours}${t('hoursUnit')} ${pad2(mins)}${t('minutesUnit')}`;
   return `${mins}${t('minutesUnit')}`;
+};
+
+const formatDateTime = (value) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('tr-TR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 const normalizeAction = (log) => {
@@ -315,6 +328,8 @@ const SecurityCheck = () => {
 
   const getStatusMessage = () => {
     if (!personDetail) return '';
+    if (Array.isArray(personDetail.restriction_reasons) && personDetail.restriction_reasons.length > 0)
+      return t('entryRestricted');
     if (personDetail.assignment_expired)
       return t('assignmentExpired') || 'Görev süresi dolmuş - GİRİŞ YASAK';
     if (personDetail.overall_status === 'red')
@@ -335,12 +350,6 @@ const SecurityCheck = () => {
 
   const canExit = () => {
     if (!personDetail) return false;
-    if (personDetail.assignment_expired) return false;
-
-    const s = String(personDetail.overall_status || '').toLowerCase();
-    const ok = s === 'green' || s === 'yellow';
-    if (!ok) return false;
-
     return isInside === true;
   };
 
@@ -404,34 +413,71 @@ const SecurityCheck = () => {
     () => (Array.isArray(personDetail?.documents) ? personDetail.documents : []),
     [personDetail]
   );
+  const activitySummary = personDetail?.activity_summary || {};
+  const restrictionReasons = Array.isArray(personDetail?.restriction_reasons)
+    ? personDetail.restriction_reasons
+    : [];
+  const gateName = (value) => GATES.find((gate) => gate.value === value)?.label || value || '-';
+  const restrictionReasonText = (reason) => {
+    const documents = Array.isArray(reason?.documents) && reason.documents.length
+      ? `: ${reason.documents.filter(Boolean).join(', ')}`
+      : '';
+    const detail = reason?.detail ? `: ${reason.detail}` : '';
+    const labels = {
+      assignment_not_started: t('assignmentNotStarted'),
+      assignment_expired: t('assignmentExpiredReason'),
+      admin_blocked: t('adminBlockedReason'),
+      mandatory_document_missing: t('mandatoryDocumentMissing'),
+      document_expired: t('expiredDocumentReason'),
+    };
+    return `${labels[reason?.code] || t('entryRestricted')}${documents || detail}`;
+  };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight mb-2">
-          {t('entryCheck')?.toLocaleUpperCase('tr-TR') || t('entryCheck')}
-        </h1>
-        <p className="text-slate-600 dark:text-slate-300 text-sm">
-          {t('searchPersonnelToCheck')}
-        </p>
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/5 dark:bg-[#080808] md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="page-title">
+            {t('entryCheck')}
+          </h1>
+          <p className="ml-[15px] mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {t('searchPersonnelToCheck')}
+          </p>
+        </div>
+        <div className="w-full md:w-[300px]">
+          <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+            {t('gate')}
+          </label>
+          <select
+            value={selectedGate}
+            onChange={(e) => setSelectedGate(e.target.value)}
+            className="h-11 w-full rounded-lg border border-slate-200 bg-[#f6f8fb] px-3 text-sm font-semibold text-slate-800 outline-none focus:border-[#0a4f83] focus:ring-2 focus:ring-sky-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+          >
+            {GATES.map((g) => (
+              <option key={g.value} value={g.value}>
+                {t(g.value)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[calc(100vh-12rem)]">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-4 min-h-[calc(100dvh-15rem)]">
         {/* Left Panel - Search */}
-        <div className="bg-white dark:bg-[#080808] border border-slate-100 dark:border-white/5 rounded-2xl p-5 flex flex-col shadow-sm">
+        <div className="bg-white dark:bg-[#080808] border border-slate-200 dark:border-white/5 rounded-2xl p-5 flex flex-col shadow-sm">
 
           {/* Header */}
-          <div className="flex items-center gap-4 mb-8">
-            <div className="w-12 h-12 bg-white dark:bg-white/5 rounded-xl flex items-center justify-center border border-transparent dark:border-white/5 shadow-sm">
-              <Search className="w-6 h-6 text-slate-900 dark:text-slate-100" />
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 bg-[#eef5fb] dark:bg-sky-950/30 rounded-lg flex items-center justify-center text-[#0a4f83] dark:text-sky-300">
+              <Search className="w-5 h-5" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               {t('personSearch') || 'Kişi Arama'}
             </h2>
           </div>
 
           {/* Form Fields */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
             {/* Name */}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-900 dark:text-slate-100 ml-1">
@@ -441,7 +487,7 @@ const SecurityCheck = () => {
                 value={searchForm.name}
                 onChange={(e) => setSearchForm(prev => ({ ...prev, name: e.target.value }))}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="w-full px-4 py-3 bg-slate-50 dark:bg-[#0A0A0A] border-b-2 border-slate-200 dark:border-white/5 focus:border-slate-900 dark:focus:border-white outline-none transition-colors font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                className="w-full h-12 px-4 rounded-lg bg-[#f6f8fb] dark:bg-white/5 border border-slate-200 dark:border-white/10 focus:border-[#0a4f83] focus:ring-2 focus:ring-sky-100 outline-none transition-colors font-medium text-slate-900 dark:text-slate-100"
                 placeholder=""
               />
             </div>
@@ -455,7 +501,7 @@ const SecurityCheck = () => {
                 value={searchForm.surname}
                 onChange={(e) => setSearchForm(prev => ({ ...prev, surname: e.target.value }))}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="w-full px-4 py-3 bg-slate-50 dark:bg-[#0A0A0A] border-b-2 border-slate-200 dark:border-white/5 focus:border-slate-900 dark:focus:border-white outline-none transition-colors font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                className="w-full h-12 px-4 rounded-lg bg-[#f6f8fb] dark:bg-white/5 border border-slate-200 dark:border-white/10 focus:border-[#0a4f83] focus:ring-2 focus:ring-sky-100 outline-none transition-colors font-medium text-slate-900 dark:text-slate-100"
                 placeholder=""
               />
             </div>
@@ -469,18 +515,18 @@ const SecurityCheck = () => {
                 value={searchForm.tc}
                 onChange={(e) => setSearchForm(prev => ({ ...prev, tc: e.target.value }))}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border-b-2 border-slate-200 dark:border-white/5 focus:border-slate-900 dark:focus:border-white outline-none transition-colors font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                className="w-full h-12 px-4 rounded-lg bg-[#f6f8fb] dark:bg-white/5 border border-slate-200 dark:border-white/10 focus:border-[#0a4f83] focus:ring-2 focus:ring-sky-100 outline-none transition-colors font-medium text-slate-900 dark:text-slate-100"
                 placeholder=""
               />
             </div>
           </div>
 
           {/* Search Button */}
-          <div className="flex justify-end mb-6">
+          <div className="flex justify-end mb-5">
             <button
               onClick={handleSearch}
               disabled={searching}
-              className="px-8 py-3 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-xl font-bold shadow-lg shadow-slate-900/10 active:scale-95 transition-all flex items-center gap-2"
+              className="h-12 min-w-[170px] px-7 bg-[#0b4f87] hover:bg-[#083d69] text-white rounded-lg font-bold shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
               {searching ? (
                 <span className="w-5 h-5 border-2 border-slate-400 border-t-slate-100 rounded-full animate-spin" />
@@ -501,8 +547,8 @@ const SecurityCheck = () => {
                   <div
                     key={person.id}
                     onClick={() => handleSelectPerson(person)}
-                    className={`p-4 rounded-[1.5rem] border cursor-pointer transition-all duration-300 group ${selectedPerson?.id === person.id
-                      ? 'border-slate-900 dark:border-white bg-[#EFF6FF] dark:bg-white/5 shadow-soft'
+                    className={`p-3.5 rounded-xl border cursor-pointer transition-all duration-200 group ${selectedPerson?.id === person.id
+                      ? 'border-[#0a4f83] dark:border-sky-400 bg-[#EFF6FF] dark:bg-sky-950/20 shadow-sm'
                       : 'border-slate-100 dark:border-white/5 hover:border-slate-200 dark:hover:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 shadow-sm'
                       }`}
                   >
@@ -551,7 +597,7 @@ const SecurityCheck = () => {
 
         {/* Right Panel */}
         {/* Right Panel - Decision */}
-        <div className="bg-white dark:bg-[#080808] border border-slate-100 dark:border-white/5 rounded-2xl p-5 flex flex-col shadow-sm">
+        <div id="inside-personnel" className="bg-white dark:bg-[#080808] border border-slate-200 dark:border-white/5 rounded-2xl p-5 flex flex-col shadow-sm scroll-mt-6">
 
           {/* Seçili personel yoksa */}
 
@@ -560,7 +606,7 @@ const SecurityCheck = () => {
           <div className="h-full flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <div className="text-lg font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+                <div className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
                   {t('insideTitle')} <span className="text-slate-500 dark:text-slate-400">({insideList.length})</span>
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -569,7 +615,7 @@ const SecurityCheck = () => {
               </div>
               <button
                 onClick={() => fetchInside({ silent: false })}
-                className="h-8 px-3 rounded-xl bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors text-[10px] font-bold uppercase tracking-wider border border-transparent dark:border-white/5 shadow-sm"
+                className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/10 transition-colors text-xs font-semibold"
               >
                 {t('refresh')}
               </button>
@@ -598,7 +644,7 @@ const SecurityCheck = () => {
                   return (
                     <div
                       key={x.personnel_id}
-                      className="bg-slate-50 dark:bg-[#0A0A0A] rounded-2xl border border-transparent dark:border-white/5 hover:dark:border-white/10 transition-all px-4 py-3 group shadow-sm hover:shadow-md"
+                      className="bg-slate-50 dark:bg-[#0A0A0A] rounded-xl border border-slate-100 dark:border-white/5 transition-all px-4 py-3 group hover:border-slate-200"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <div className="min-w-0">
@@ -630,7 +676,7 @@ const SecurityCheck = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleSelectPerson({ id: x.personnel_id, ...x })}
-                          className="flex-1 py-3 rounded-2xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-all flex items-center justify-center gap-2 group/btn"
+                          className="flex-1 h-10 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold transition-all flex items-center justify-center gap-2 group/btn"
                         >
                           <div className="w-6 h-6 rounded-full bg-white dark:bg-indigo-900/50 flex items-center justify-center shadow-sm group-hover/btn:scale-110 transition-transform">
                             <FileText className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
@@ -641,7 +687,7 @@ const SecurityCheck = () => {
                         <button
                           onClick={() => handleQuickExit(x)}
                           disabled={entryLoading}
-                          className="flex-1 py-3 rounded-2xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/20 dark:hover:bg-rose-900/30 text-rose-700 dark:text-rose-300 text-xs font-bold transition-all flex items-center justify-center gap-2 group/btn"
+                          className="flex-1 h-10 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/20 dark:hover:bg-rose-900/30 text-rose-700 dark:text-rose-300 text-xs font-bold transition-all flex items-center justify-center gap-2 group/btn"
                         >
                           <div className="w-6 h-6 rounded-full bg-white dark:bg-rose-900/50 flex items-center justify-center shadow-sm group-hover/btn:scale-110 transition-transform">
                             <LogOut className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
@@ -707,30 +753,12 @@ const SecurityCheck = () => {
                     </div>
                   </div>
 
-                  {/* Gate Selection */}
-                  <div className="mb-4">
-                    <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2 ml-1">
-                      {t('gate')}
-                    </label>
-                    <select
-                      value={selectedGate}
-                      onChange={(e) => setSelectedGate(e.target.value)}
-                      className="w-full h-12 px-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-900 dark:text-slate-100 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/10 shadow-inner"
-                    >
-                      {GATES.map((g) => (
-                        <option key={g.value} value={g.value}>
-                          {t(g.value)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
                   {/* Entry/Exit Buttons */}
                   <div className="flex gap-3 mb-6">
                     <button
                       onClick={() => submitEntry('IN')}
                       disabled={entryLoading || !canEnter()}
-                      className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold uppercase tracking-wide transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 ${canEnter()
+                      className={`flex-1 h-14 px-4 rounded-xl text-base font-bold transition-all shadow-sm active:scale-[0.98] flex items-center justify-center gap-2 ${canEnter()
                         ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
                         : 'bg-slate-100 text-slate-400 dark:bg-white/5 dark:text-slate-600 cursor-not-allowed border border-transparent dark:border-white/5'
                         }`}
@@ -742,7 +770,7 @@ const SecurityCheck = () => {
                     <button
                       onClick={() => submitEntry('OUT')}
                       disabled={entryLoading || !canExit()}
-                      className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold uppercase tracking-wide transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 ${canExit()
+                      className={`flex-1 h-14 px-4 rounded-xl text-base font-bold transition-all shadow-sm active:scale-[0.98] flex items-center justify-center gap-2 ${canExit()
                         ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/20'
                         : 'bg-slate-100 text-slate-400 dark:bg-white/5 dark:text-slate-600 cursor-not-allowed border border-transparent dark:border-white/5'
                         }`}
@@ -750,6 +778,44 @@ const SecurityCheck = () => {
                       <DoorClosed className="w-5 h-5" />
                       {t('allowExit')}
                     </button>
+                  </div>
+
+                  {/* Recent activity summary */}
+                  <div className="grid grid-cols-2 gap-2.5 mb-6">
+                    {[
+                      {
+                        icon: LogIn,
+                        label: t('lastEntryDate'),
+                        value: formatDateTime(activitySummary.last_entry_at),
+                        color: 'text-emerald-600 dark:text-emerald-400',
+                      },
+                      {
+                        icon: LogOut,
+                        label: t('lastExitDate'),
+                        value: formatDateTime(activitySummary.last_exit_at),
+                        color: 'text-rose-600 dark:text-rose-400',
+                      },
+                      {
+                        icon: Clock,
+                        label: t('todayInsideDuration'),
+                        value: formatDuration((activitySummary.today_inside_seconds || 0) * 1000, t),
+                        color: 'text-blue-600 dark:text-blue-400',
+                      },
+                      {
+                        icon: MapPin,
+                        label: t('lastUsedGate'),
+                        value: gateName(activitySummary.last_gate),
+                        color: 'text-amber-600 dark:text-amber-400',
+                      },
+                    ].map(({ icon: Icon, label, value, color }) => (
+                      <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5">
+                        <div className="mb-1.5 flex items-center gap-1.5">
+                          <Icon className={`h-4 w-4 ${color}`} />
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
+                        </div>
+                        <p className="text-sm font-bold leading-5 text-slate-900 dark:text-slate-100">{value}</p>
+                      </div>
+                    ))}
                   </div>
 
                   {/* Time Inside Info (Only if Inside) */}
@@ -779,10 +845,16 @@ const SecurityCheck = () => {
                   )}
 
                   {/* Status Display */}
-                  <div className="flex flex-col items-center justify-center py-4 mb-6 bg-slate-50 dark:bg-[#0A0A0A] rounded-2xl border border-slate-100 dark:border-white/5 shadow-inner">
+                  <div className={`flex flex-col items-center justify-center py-5 mb-6 rounded-xl border-2 ${
+                    personDetail.overall_status === 'red'
+                      ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900/60'
+                      : personDetail.overall_status === 'yellow'
+                        ? 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900/60'
+                        : 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/60'
+                  }`}>
                     <StatusBadge status={personDetail.overall_status} size="lg" />
                     <p
-                      className={`mt-3 text-sm font-bold uppercase tracking-wide ${personDetail.overall_status === 'red'
+                      className={`mt-3 text-base font-bold ${personDetail.overall_status === 'red'
                         ? 'text-red-600 dark:text-red-400'
                         : personDetail.overall_status === 'yellow'
                           ? 'text-amber-600 dark:text-amber-400'
@@ -791,9 +863,22 @@ const SecurityCheck = () => {
                     >
                       {getStatusMessage()}
                     </p>
+                    {restrictionReasons.length > 0 && (
+                      <div className="mt-3 w-full space-y-2 px-4">
+                        {restrictionReasons.map((reason, index) => (
+                          <div
+                            key={`${reason.code}-${index}`}
+                            className="flex items-start gap-2 rounded-lg border border-red-200 bg-white/80 px-3 py-2 text-left text-sm font-semibold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+                          >
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span>{restrictionReasonText(reason)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {(safePersonnel.assignment_start || safePersonnel.assignment_end) && (
                       <div className="mt-2 text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-white/5 px-3 py-1 rounded-full border border-slate-200 dark:border-white/5">
-                        {t('assignmentDuration')}: {safePersonnel.assignment_start && new Date(safePersonnel.assignment_start).toLocaleDateString()} - {safePersonnel.assignment_end && new Date(safePersonnel.assignment_end).toLocaleDateString()}
+                        {t('assignmentDuration')}: {safePersonnel.assignment_start && new Date(safePersonnel.assignment_start).toLocaleDateString('tr-TR')} - {safePersonnel.assignment_end && new Date(safePersonnel.assignment_end).toLocaleDateString('tr-TR')}
                       </div>
                     )}
                   </div>
@@ -821,7 +906,7 @@ const SecurityCheck = () => {
                               </p>
                               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
                                 <Calendar className="w-3 h-3" />
-                                {doc?.expiry_date ? new Date(doc.expiry_date).toLocaleDateString() : '-'}
+                                {doc?.expiry_date ? new Date(doc.expiry_date).toLocaleDateString('tr-TR') : '-'}
                                 {typeof doc?.days_until_expiry === 'number' && doc.days_until_expiry >= 0 && (
                                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${doc.days_until_expiry < 30 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-slate-200 text-slate-600 dark:bg-white/5 dark:text-slate-400'}`}>
                                     {doc.days_until_expiry} {t('daysLeft')}

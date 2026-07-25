@@ -93,6 +93,7 @@ async def compute_can_enter_map(personnel_list: list) -> dict:
     # 2) Sadece EXPIRED zorunlu evrakları çek (tam liste yerine)
     # Bu şekilde 100K yerine sadece expired olanlar gelir = çok az bellek
     expired_personnel_ids = set()
+    present_mandatory_types = {}
 
     if mandatory_type_ids:
         now_iso = now.isoformat()
@@ -113,6 +114,16 @@ async def compute_can_enter_map(personnel_list: list) -> dict:
             for d in expired_docs:
                 expired_personnel_ids.add(d["personnel_id"])
 
+            mandatory_docs = await db.personnel_documents.find(
+                {
+                    "personnel_id": {"$in": batch_ids},
+                    "document_type_id": {"$in": mandatory_list},
+                },
+                {"_id": 0, "personnel_id": 1, "document_type_id": 1},
+            ).to_list(len(batch_ids) * max(1, len(mandatory_list)))
+            for d in mandatory_docs:
+                present_mandatory_types.setdefault(d["personnel_id"], set()).add(d["document_type_id"])
+
     # 3) Sonuç
     result = {}
     for p in personnel_list:
@@ -120,9 +131,22 @@ async def compute_can_enter_map(personnel_list: list) -> dict:
         if not pid:
             continue
 
+        if p.get("entry_blocked") is True or p.get("is_blocked") is True or p.get("blocked") is True:
+            result[pid] = False
+            continue
+
         # assignment kontrol
+        assignment_start = parse_dt_safe(p.get("assignment_start"))
+        if assignment_start and assignment_start > now:
+            result[pid] = False
+            continue
+
         assignment_end = parse_dt_safe(p.get("assignment_end"))
         if assignment_end and assignment_end < now:
+            result[pid] = False
+            continue
+
+        if mandatory_type_ids and not mandatory_type_ids.issubset(present_mandatory_types.get(pid, set())):
             result[pid] = False
             continue
 

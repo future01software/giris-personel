@@ -21,8 +21,8 @@ import {
   DoorOpen,
   UsersRound,
   Sliders,
+  History,
   ChevronLeft,
-  ChevronRight,
   Settings,
   User
 } from 'lucide-react';
@@ -100,6 +100,8 @@ const Layout = ({ children }) => {
       { name: t('dashboard'), path: '/dashboard', icon: BarChart3, roles: ['admin', 'supervisor'] },
       { name: t('personnel'), path: '/personnel', icon: IdCard, roles: ['admin'] },
       { name: t('entryCheck'), path: '/entry-check', icon: DoorOpen, roles: ['admin'] },
+      { name: t('entryCheck'), path: '/security-check', icon: DoorOpen, roles: ['security'] },
+      { name: t('entryExitRecords'), path: '/entry-logs', icon: History, roles: ['security'] },
       { name: t('users'), path: '/users', icon: UsersRound, roles: ['admin'] },
       { name: t('settings'), path: '/settings', icon: Sliders, roles: ['admin'] },
     ],
@@ -120,7 +122,7 @@ const Layout = ({ children }) => {
   const roleLabel = roleKey ? t(roleKey) : '';
 
   return (
-    <div className="shell-container font-['Outfit',_sans-serif] bg-slate-100 dark:bg-[#050505] h-screen overflow-hidden flex flex-col md:flex-row relative transition-colors duration-500">
+    <div className="shell-container font-['Segoe_UI',_Arial,_sans-serif] bg-[#f6f8fb] dark:bg-slate-950 h-screen overflow-hidden flex flex-col md:flex-row relative transition-colors duration-300">
       {/* Premium Background Flair (Landing Page Style) */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden transition-opacity duration-1000">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 dark:bg-blue-600/5 rounded-full blur-[120px] animate-pulse-subtle" />
@@ -135,39 +137,48 @@ const Layout = ({ children }) => {
           SIDEBAR (Desktop)
       ======================== */}
       <aside
-        className="hidden md:flex flex-col z-50 w-72 h-full transition-all duration-300 bg-transparent"
+        className="hidden md:flex flex-col z-50 w-[252px] h-full transition-all duration-300 bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800"
       >
         {/* Sidebar Header (Logo) */}
-        <div className="h-28 flex items-center justify-center relative">
-          <Link to="/dashboard" className="flex items-center group">
-            <span className="text-2xl font-['Pacifico',_cursive] text-slate-800 dark:text-white transition-colors">
-              Clear<span className="text-slate-500 dark:text-slate-400 ml-1 transition-colors">2Work</span>
+        <div className="h-[68px] flex items-center px-5 border-b border-slate-200 dark:border-slate-800 relative">
+          <Link to="/dashboard" className="flex items-center gap-3 group">
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#0b3b68]/15 bg-[#eef5fb] text-[#0b3b68] dark:bg-slate-900 dark:text-sky-300">
+              <ShieldCheck className="h-6 w-6" strokeWidth={2.2} />
+            </span>
+            <span className="whitespace-nowrap">
+              <span className="block text-[14px] font-bold text-[#27384a] dark:text-white">Clear2Work</span>
+              <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Giriş Kontrol Sistemi
+              </span>
             </span>
           </Link>
         </div>
 
         {/* Navigation Sections */}
-        <div className="flex-1 py-4 px-6 space-y-8 overflow-y-auto no-scrollbar">
+        <div className="flex-1 py-6 space-y-8 overflow-y-auto no-scrollbar">
           {/* Main Menu Section */}
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] font-bold text-slate-400 dark:text-slate-500 px-4 mb-5">
+            <p className="text-[10px] uppercase tracking-[0.04em] font-bold text-[#7c8997] px-5 mb-2">
               {t('mainMenu')}
             </p>
-            <nav className="space-y-1">
+            <nav>
               {filteredNav.map((item) => {
                 const Icon = item.icon;
-                const isActive = location.pathname === item.path;
+                const [itemPath, itemHash = ''] = item.path.split('#');
+                const isActive = itemHash
+                  ? location.pathname === itemPath && location.hash === `#${itemHash}`
+                  : location.pathname === itemPath && !location.hash;
                 return (
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`flex items-center rounded-2xl transition-all duration-300 group relative px-4 py-3.5 gap-4 ${isActive
-                      ? 'bg-white dark:bg-white/5 text-slate-900 dark:text-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white dark:border-white/10'
-                      : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    className={`flex items-center border-l-[3px] py-[10px] px-5 gap-3 transition-colors group relative ${isActive
+                      ? 'border-[#0a4f83] bg-[#edf3f8] text-[#0a4f83] dark:bg-sky-950/40 dark:text-sky-300'
+                      : 'border-transparent text-[#34495e] hover:bg-[#f3f7fa] hover:text-[#0a4f83] dark:text-slate-400 dark:hover:bg-slate-900'
                       }`}
                   >
-                    <Icon className={`w-5 h-5 flex-shrink-0 transition-all duration-300 ${isActive ? 'stroke-[2.5] text-indigo-600 dark:text-indigo-400' : 'stroke-[2]'}`} />
-                    <span className={`font-semibold text-sm ${isActive ? 'text-slate-900 dark:text-white' : ''}`}>{item.name}</span>
+                    <Icon className="h-[16px] w-[16px] flex-shrink-0" strokeWidth={isActive ? 2 : 1.65} />
+                    <span className="font-semibold text-[12px] whitespace-nowrap">{item.name}</span>
                   </Link>
                 )
               })}
@@ -176,23 +187,23 @@ const Layout = ({ children }) => {
         </div>
 
         {/* User Account Section */}
-        <div className="p-8 mt-auto">
-          <p className="text-[11px] uppercase tracking-[0.2em] font-bold text-slate-400 dark:text-slate-500 px-4 mb-5">
+        <div className="p-4 mt-auto border-t border-slate-200 dark:border-slate-800">
+          <p className="hidden">
             {t('account')}
           </p>
           <div className="flex items-center gap-4 group">
-            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white dark:border-white/5 shadow-lg flex-shrink-0">
-              <div className="w-full h-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 font-bold">
+            <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+              <div className="w-full h-full bg-[#dceaf7] dark:bg-slate-800 flex items-center justify-center text-[#0b4f87] dark:text-sky-300 font-bold text-sm">
                 {user?.full_name?.charAt(0) || 'U'}
               </div>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{user?.full_name}</p>
-              <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500 truncate uppercase tracking-wider">{roleLabel}</p>
+                <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500 truncate mt-0.5">{roleLabel}</p>
             </div>
             <button
               onClick={handleLogout}
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-white/5 transition-all duration-300 shadow-sm border border-transparent hover:border-slate-100 dark:hover:border-white/10"
+              className="w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
               title={t('logout')}
             >
               <LogOut className="w-4 h-4" />
@@ -204,25 +215,17 @@ const Layout = ({ children }) => {
       {/* ========================
           NESTED CONTENT PANEL
       ======================== */}
-      <main className="flex-1 flex flex-col my-4 mr-4 rounded-[3.5rem] bg-white dark:bg-[#0A0A0A] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white/50 dark:border-white/5 overflow-hidden relative transition-colors duration-500">
+      <main className="flex-1 flex flex-col bg-[#f6f8fb] dark:bg-slate-950 overflow-hidden relative transition-colors duration-300">
         {/* Subtle background flair inside panel */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50/20 dark:bg-white/5 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none" />
 
         {/* Header inside Panel */}
-        <header className="hidden md:flex items-center justify-between h-20 px-10 relative z-20">
+        <header className="hidden md:flex items-center justify-end h-[68px] px-7 relative z-20 bg-[#0a3b67] border-b border-[#062d50] text-white">
           <div className="flex items-center gap-2">
-            <span className="text-slate-400 dark:text-slate-500 text-sm font-medium">Clear2Work</span>
-            <ChevronRight className="w-4 h-4 text-slate-300" />
-            <span className="text-slate-900 dark:text-white font-bold text-sm tracking-tight capitalize">
-              {location.pathname.split('/').pop()?.replace('-', ' ') || 'Dashboard'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 pr-2">
+            <div className="flex items-center gap-1">
               <button
                 onClick={toggleTheme}
-                className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all text-slate-500 border border-transparent hover:border-slate-200 dark:hover:border-white/10"
+                className="p-2.5 rounded-md hover:bg-white/10 transition-colors text-white/90"
                 title={t('appearance')}
               >
                 {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -230,7 +233,7 @@ const Layout = ({ children }) => {
 
               <button
                 onClick={toggleLanguage}
-                className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all text-slate-500 border border-transparent hover:border-slate-200 dark:hover:border-white/10 flex items-center justify-center min-w-[40px]"
+                className="p-2.5 rounded-md hover:bg-white/10 transition-colors text-white/90 flex items-center justify-center min-w-[40px]"
                 title={t('language')}
               >
                 <span className="text-[10px] font-bold">
@@ -239,16 +242,14 @@ const Layout = ({ children }) => {
               </button>
             </div>
 
-            <div className="h-6 w-px bg-slate-100 dark:bg-slate-800 mx-1" />
-
-            <div className="h-6 w-px bg-slate-100 dark:bg-slate-800 mx-1" />
+            <div className="h-6 w-px bg-white/20 mx-2" />
 
             {/* Notification Bell - Hide for Security Role */}
             {roleKey !== 'security' && (
               <div className="relative">
                 <button
                   onClick={() => setNotificationsOpen(!notificationsOpen)}
-                  className="relative p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-500 border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+                  className="relative p-2.5 rounded-md hover:bg-white/10 transition-colors text-white/90"
                 >
                   <Bell className="w-5 h-5" />
                   {alerts.length > 0 && (
@@ -259,8 +260,8 @@ const Layout = ({ children }) => {
                 {notificationsOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)} />
-                    <div className="absolute right-0 mt-3 w-80 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl shadow-premium z-50 overflow-hidden animate-in fade-in zoom-in-95 origin-top-right">
-                      <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+                    <div className="absolute right-0 mt-3 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 origin-top-right">
+                      <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
                         <h3 className="font-bold text-sm text-slate-900 dark:text-white">{t('urgentAlerts')}</h3>
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 uppercase">
                           {alerts.length} {t('alerts') || 'Alerts'}
@@ -277,7 +278,7 @@ const Layout = ({ children }) => {
                                 setNotificationsOpen(false);
                                 navigate(`/personnel/${alert.personnel_id}`);
                               }}
-                              className="w-full text-left p-4 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all flex items-start gap-4 group border border-transparent hover:border-slate-100 dark:hover:border-slate-700"
+                              className="w-full text-left p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all flex items-start gap-3 group border border-transparent hover:border-slate-100 dark:hover:border-slate-700"
                             >
                               <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-900/10 flex items-center justify-center flex-shrink-0 text-red-500">
                                 <ShieldCheck className="w-5 h-5 stroke-[2.5]" />
@@ -305,8 +306,8 @@ const Layout = ({ children }) => {
         </header>
 
         {/* Nested Content Scroll Area */}
-        <div className="flex-1 overflow-y-auto px-6 md:px-10 pb-10 custom-scrollbar relative z-10">
-          <div className="max-w-[1600px] mx-auto">
+        <div className="flex-1 overflow-y-auto px-3 pb-24 md:px-7 md:pb-8 custom-scrollbar relative z-10">
+          <div className="max-w-[1600px] mx-auto py-6">
             {children}
           </div>
         </div>
@@ -318,8 +319,11 @@ const Layout = ({ children }) => {
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 w-full z-[60] bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 h-16 px-4 flex items-center justify-between">
         <Link to="/dashboard" className="flex items-center gap-2">
-          <span className="font-['Pacifico',_cursive] text-xl text-slate-800 dark:text-white">
-            Clear<span className="text-slate-500 dark:text-slate-400">2Work</span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-[#eef5fb] text-[#0a3b67]">
+            <ShieldCheck className="h-5 w-5" />
+          </span>
+          <span className="font-bold text-lg text-[#17324d] dark:text-white">
+            Clear<span className="text-[#0a4f83] dark:text-sky-300">2</span>Work
           </span>
         </Link>
         <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2">

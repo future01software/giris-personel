@@ -8,6 +8,7 @@ import { ArrowLeft, Edit, Save, X, Plus, Trash2, User } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import LocalizedDateInput from '../components/LocalizedDateInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -37,6 +38,8 @@ const PersonnelDetail = () => {
     photo_url: '',
     assignment_start: '',
     assignment_end: '',
+    entry_blocked: false,
+    entry_block_reason: '',
   });
 
   const [docForm, setDocForm] = useState({
@@ -77,6 +80,8 @@ const PersonnelDetail = () => {
         photo_url: p.photo_url || '',
         assignment_start: p.assignment_start || '',
         assignment_end: p.assignment_end || '',
+        entry_blocked: Boolean(p.entry_blocked),
+        entry_block_reason: p.entry_block_reason || '',
       });
     } catch (error) {
       console.error('Failed to fetch personnel detail:', error);
@@ -202,7 +207,7 @@ const PersonnelDetail = () => {
           </Button>
 
           {/* İsim başlığını uppercase yapmıyoruz (isimlerde TR karakter bozulmasın) */}
-          <h1 className={`text-2xl font-semibold tracking-tight ${titleText}`} style={{ fontFamily: 'Oswald, sans-serif' }}>
+          <h1 className={`page-title ${titleText}`}>
             {p.full_name}
           </h1>
 
@@ -234,6 +239,8 @@ const PersonnelDetail = () => {
                   photo_url: p.photo_url || '',
                   assignment_start: p.assignment_start || '',
                   assignment_end: p.assignment_end || '',
+                  entry_blocked: Boolean(p.entry_blocked),
+                  entry_block_reason: p.entry_block_reason || '',
                 });
               }}
             >
@@ -348,8 +355,7 @@ const PersonnelDetail = () => {
                 <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   {t('assignmentStart')}
                 </Label>
-                <Input
-                  type="date"
+                <LocalizedDateInput
                   value={toDateInput(editForm.assignment_start)}
                   onChange={(e) => setEditForm({ ...editForm, assignment_start: e.target.value })}
                   className={inputDark}
@@ -361,13 +367,32 @@ const PersonnelDetail = () => {
                 <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   {t('assignmentEnd')}
                 </Label>
-                <Input
-                  type="date"
+                <LocalizedDateInput
                   value={toDateInput(editForm.assignment_end)}
                   onChange={(e) => setEditForm({ ...editForm, assignment_end: e.target.value })}
                   className={inputDark}
                   data-testid="edit-end"
                 />
+              </div>
+
+              <div className="col-span-2 rounded-xl border border-red-200 bg-red-50/60 p-4 dark:border-red-900/50 dark:bg-red-950/20">
+                <label className="flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={editForm.entry_blocked}
+                    onChange={(e) => setEditForm({ ...editForm, entry_blocked: e.target.checked })}
+                    className="h-4 w-4 accent-red-600"
+                  />
+                  <span className="text-sm font-bold text-red-700 dark:text-red-300">{t('blockPersonnelEntry')}</span>
+                </label>
+                {editForm.entry_blocked && (
+                  <Input
+                    value={editForm.entry_block_reason}
+                    onChange={(e) => setEditForm({ ...editForm, entry_block_reason: e.target.value })}
+                    placeholder={t('blockReasonPlaceholder')}
+                    className={`${inputDark} mt-3`}
+                  />
+                )}
               </div>
             </div>
           ) : (
@@ -456,8 +481,7 @@ const PersonnelDetail = () => {
                   <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     {t('expiryDate')} *
                   </Label>
-                  <Input
-                    type="date"
+                  <LocalizedDateInput
                     value={docForm.expiry_date}
                     onChange={(e) => setDocForm({ ...docForm, expiry_date: e.target.value })}
                     required
