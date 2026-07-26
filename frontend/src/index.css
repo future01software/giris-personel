@@ -30,6 +30,29 @@ html.theme-transitioning img {
   transition: none !important;
 }
 
+/* Mobile browser bars and notched screens */
+.mobile-safe-header {
+  height: calc(4rem + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+}
+
+.mobile-safe-content {
+  padding-top: calc(4rem + env(safe-area-inset-top));
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+.mobile-safe-menu {
+  padding-top: calc(4rem + env(safe-area-inset-top));
+  padding-bottom: calc(2.5rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  .mobile-safe-content {
+    padding-top: 0;
+    padding-bottom: 2rem;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

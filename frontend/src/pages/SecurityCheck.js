@@ -526,7 +526,7 @@ const SecurityCheck = () => {
             <button
               onClick={handleSearch}
               disabled={searching}
-              className="h-12 min-w-[170px] px-7 bg-[#0b4f87] hover:bg-[#083d69] text-white rounded-lg font-bold shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              className="h-12 w-full min-w-[170px] px-7 bg-[#0b4f87] hover:bg-[#083d69] text-white rounded-lg font-bold shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2 sm:w-auto"
             >
               {searching ? (
                 <span className="w-5 h-5 border-2 border-slate-400 border-t-slate-100 rounded-full animate-spin" />

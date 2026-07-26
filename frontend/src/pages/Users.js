@@ -115,7 +115,7 @@ const Users = () => {
     //    <Layout>
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="page-title">
           {t('users')}
         </h1>
@@ -125,7 +125,7 @@ const Users = () => {
             resetForm();
             setShowForm(true);
           }}
-          className="px-4 py-2 premium-gradient text-white rounded-xl hover:shadow-lg transition-all transform hover:scale-105 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider border-none"
+          className="w-full justify-center px-4 py-2 premium-gradient text-white rounded-xl hover:shadow-lg transition-all transform hover:scale-105 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider border-none sm:w-auto"
           data-testid="add-user-button"
         >
           <Plus className="w-4 h-4" />
