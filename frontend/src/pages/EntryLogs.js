@@ -164,7 +164,7 @@ const EntryLogs = () => {
     <>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Clock className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <div>
@@ -177,11 +177,11 @@ const EntryLogs = () => {
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 min-[390px]:flex-row">
             {isAdmin && (
               <button
                 onClick={() => setIsReportOpen(true)}
-                className="px-5 py-2.5 bg-emerald-600 border border-emerald-600 text-white rounded-full hover:bg-emerald-700 transition-all shadow-sm hover:shadow-md flex items-center gap-2 text-sm font-bold"
+                className="w-full justify-center px-5 py-2.5 bg-emerald-600 border border-emerald-600 text-white rounded-full hover:bg-emerald-700 transition-all shadow-sm hover:shadow-md flex items-center gap-2 text-sm font-bold min-[390px]:w-auto"
               >
                 <FileDown className="w-4 h-4" />
                 {t('downloadReport')}
@@ -189,7 +189,7 @@ const EntryLogs = () => {
             )}
             <button
               onClick={() => navigate('/entry-logs/search')}
-              className="px-5 py-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 rounded-full hover:bg-slate-50 dark:hover:bg-white/10 transition-all shadow-sm hover:shadow-md flex items-center gap-2 text-sm font-bold"
+              className="w-full justify-center px-5 py-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 rounded-full hover:bg-slate-50 dark:hover:bg-white/10 transition-all shadow-sm hover:shadow-md flex items-center gap-2 text-sm font-bold min-[390px]:w-auto"
             >
               <Search className="w-4 h-4 text-blue-600" />
               {t('searchRecord')}
