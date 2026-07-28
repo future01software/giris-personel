@@ -8,6 +8,7 @@ import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
 import { Skeleton } from '../components/ui/skeleton';
 import axios from 'axios';
+import { isLocalPreviewHost, LOCAL_DEMO_PERSONNEL } from '../utils/localPreviewData';
 
 const API = `${process.env.REACT_APP_BACKEND_URL || 'http://' + window.location.hostname + ':8000'}/api`;
 
@@ -118,6 +119,10 @@ const Personnel = () => {
   const searchWasFocusedRef = useRef(false);
 
   useEffect(() => {
+    if (isLocalPreviewHost()) {
+      setAllCompanies([LOCAL_DEMO_PERSONNEL.company]);
+      return;
+    }
     (async () => {
       try {
         const res = await axios.get(`${API}/personnel/companies`);
@@ -133,6 +138,12 @@ const Personnel = () => {
     else setIsFetching(true);
 
     try {
+      if (isLocalPreviewHost()) {
+        setPersonnel([LOCAL_DEMO_PERSONNEL]);
+        setTotalPages(1);
+        setTotal(1);
+        return;
+      }
       const params = new URLSearchParams();
       params.set('page', String(page));
       params.set('limit', String(limit));

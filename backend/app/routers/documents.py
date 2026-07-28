@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-
 @router.post("/types")
 async def create_document_type(data: DocumentTypeCreate, current_user: dict = Depends(get_current_user)):
     await require_role(current_user, ["admin"])
@@ -68,17 +67,31 @@ async def update_document(doc_id: str, data: PersonnelDocumentCreate, current_us
     await require_role(current_user, ["admin"])
 
     update_data = {"expiry_date": data.expiry_date, "notes": data.notes}
-    result = await db.personnel_documents.update_one({"id": doc_id}, {"$set": update_data})
+    result = await db.personnel_documents.update_one({
+        "id": doc_id,
+        "personnel_id": data.personnel_id,
+        "document_type_id": data.document_type_id,
+    }, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Document not found")
     return {"message": "Document updated"}
 
 
 @router.delete("/{doc_id}")
-async def delete_document(doc_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_document(
+    doc_id: str,
+    personnel_id: str | None = None,
+    document_type_id: str | None = None,
+    current_user: dict = Depends(get_current_user),
+):
     await require_role(current_user, ["admin"])
 
-    result = await db.personnel_documents.delete_one({"id": doc_id})
+    query = {"id": doc_id}
+    if personnel_id:
+        query["personnel_id"] = personnel_id
+    if document_type_id:
+        query["document_type_id"] = document_type_id
+    result = await db.personnel_documents.delete_one(query)
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Document not found")
     return {"message": "Document deleted"}

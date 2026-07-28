@@ -122,7 +122,7 @@ const Layout = ({ children }) => {
   const roleLabel = roleKey ? t(roleKey) : '';
 
   return (
-    <div className="shell-container font-['Segoe_UI',_Arial,_sans-serif] bg-[#f6f8fb] dark:bg-slate-950 h-[100dvh] overflow-hidden flex flex-col md:flex-row relative transition-colors duration-300">
+    <div className="shell-container font-['Segoe_UI',_Arial,_sans-serif] bg-[#f6f8fb] dark:bg-slate-950 h-screen overflow-hidden flex flex-col md:flex-row relative transition-colors duration-300">
       {/* Premium Background Flair (Landing Page Style) */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden transition-opacity duration-1000">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 dark:bg-blue-600/5 rounded-full blur-[120px] animate-pulse-subtle" />
@@ -137,17 +137,17 @@ const Layout = ({ children }) => {
           SIDEBAR (Desktop)
       ======================== */}
       <aside
-        className="hidden md:flex flex-col z-50 w-[252px] h-full transition-all duration-300 bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800"
+        className="hidden md:flex flex-col z-50 w-[280px] h-full flex-shrink-0 transition-all duration-300 bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800"
       >
         {/* Sidebar Header (Logo) */}
-        <div className="h-[68px] flex items-center px-5 border-b border-slate-200 dark:border-slate-800 relative">
-          <Link to="/dashboard" className="flex items-center gap-3 group">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#0b3b68]/15 bg-[#eef5fb] text-[#0b3b68] dark:bg-slate-900 dark:text-sky-300">
-              <ShieldCheck className="h-6 w-6" strokeWidth={2.2} />
+        <div className="h-[72px] flex items-center px-6 border-b border-slate-200 dark:border-slate-800 relative">
+          <Link to="/dashboard" className="flex items-center gap-3.5 group">
+            <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#0b3b68]/15 bg-[#eef5fb] text-[#0b3b68] dark:bg-slate-900 dark:text-sky-300">
+              <ShieldCheck className="h-6 w-6" strokeWidth={2.1} />
             </span>
             <span className="whitespace-nowrap">
-              <span className="block text-[14px] font-bold text-[#27384a] dark:text-white">Clear2Work</span>
-              <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              <span className="block text-[16px] font-bold text-[#27384a] dark:text-white">Clear2Work</span>
+              <span className="block text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-500">
                 Giriş Kontrol Sistemi
               </span>
             </span>
@@ -155,10 +155,10 @@ const Layout = ({ children }) => {
         </div>
 
         {/* Navigation Sections */}
-        <div className="flex-1 py-6 space-y-8 overflow-y-auto no-scrollbar">
+        <div className="flex-1 py-7 space-y-8 overflow-y-auto no-scrollbar">
           {/* Main Menu Section */}
           <div>
-            <p className="text-[10px] uppercase tracking-[0.04em] font-bold text-[#7c8997] px-5 mb-2">
+            <p className="text-[11px] uppercase tracking-[0.07em] font-bold text-[#7c8997] px-6 mb-3">
               {t('mainMenu')}
             </p>
             <nav>
@@ -172,13 +172,13 @@ const Layout = ({ children }) => {
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`flex items-center border-l-[3px] py-[10px] px-5 gap-3 transition-colors group relative ${isActive
+                    className={`flex min-h-[48px] items-center border-l-[3px] py-3 px-6 gap-4 transition-colors group relative ${isActive
                       ? 'border-[#0a4f83] bg-[#edf3f8] text-[#0a4f83] dark:bg-sky-950/40 dark:text-sky-300'
                       : 'border-transparent text-[#34495e] hover:bg-[#f3f7fa] hover:text-[#0a4f83] dark:text-slate-400 dark:hover:bg-slate-900'
                       }`}
                   >
-                    <Icon className="h-[16px] w-[16px] flex-shrink-0" strokeWidth={isActive ? 2 : 1.65} />
-                    <span className="font-semibold text-[12px] whitespace-nowrap">{item.name}</span>
+                    <Icon className="h-5 w-5 flex-shrink-0" strokeWidth={isActive ? 2 : 1.7} />
+                    <span className="font-semibold text-[14px] leading-5 whitespace-nowrap">{item.name}</span>
                   </Link>
                 )
               })}
@@ -187,19 +187,19 @@ const Layout = ({ children }) => {
         </div>
 
         {/* User Account Section */}
-        <div className="p-4 mt-auto border-t border-slate-200 dark:border-slate-800">
+        <div className="p-5 mt-auto border-t border-slate-200 dark:border-slate-800">
           <p className="hidden">
             {t('account')}
           </p>
           <div className="flex items-center gap-4 group">
-            <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+            <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0">
               <div className="w-full h-full bg-[#dceaf7] dark:bg-slate-800 flex items-center justify-center text-[#0b4f87] dark:text-sky-300 font-bold text-sm">
                 {user?.full_name?.charAt(0) || 'U'}
               </div>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{user?.full_name}</p>
-                <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500 truncate mt-0.5">{roleLabel}</p>
+              <p className="text-[14px] font-bold text-slate-900 dark:text-white truncate">{user?.full_name}</p>
+                <p className="text-[12px] font-medium text-slate-400 dark:text-slate-500 truncate mt-0.5">{roleLabel}</p>
             </div>
             <button
               onClick={handleLogout}
@@ -220,7 +220,7 @@ const Layout = ({ children }) => {
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50/20 dark:bg-white/5 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none" />
 
         {/* Header inside Panel */}
-        <header className="hidden md:flex items-center justify-end h-[68px] px-7 relative z-20 bg-[#0a3b67] border-b border-[#062d50] text-white">
+        <header className="hidden md:flex items-center justify-end h-[72px] px-7 flex-shrink-0 relative z-20 bg-[#0a3b67] border-b border-[#062d50] text-white">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
               <button
@@ -306,7 +306,7 @@ const Layout = ({ children }) => {
         </header>
 
         {/* Nested Content Scroll Area */}
-        <div className="mobile-safe-content flex-1 overflow-y-auto px-3 pb-24 md:px-7 md:pb-8 custom-scrollbar relative z-10">
+        <div className="flex-1 overflow-y-auto px-3 pb-24 md:px-7 md:pb-8 custom-scrollbar relative z-10">
           <div className="max-w-[1600px] mx-auto py-6">
             {children}
           </div>
@@ -317,7 +317,7 @@ const Layout = ({ children }) => {
           MOBILE SECTION
       ======================== */}
       {/* Mobile Header */}
-      <div className="mobile-safe-header md:hidden fixed top-0 w-full z-[60] bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 flex items-center justify-between">
+      <div className="md:hidden fixed top-0 w-full z-[60] bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 h-16 px-4 flex items-center justify-between">
         <Link to="/dashboard" className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-[#eef5fb] text-[#0a3b67]">
             <ShieldCheck className="h-5 w-5" />
@@ -334,7 +334,7 @@ const Layout = ({ children }) => {
       {/* Mobile Menu Overlay */}
       {
         mobileMenuOpen && (
-          <div className="mobile-safe-menu md:hidden fixed inset-0 z-[70] bg-white dark:bg-slate-950 animate-in fade-in slide-in-from-top-10 overflow-y-auto">
+          <div className="md:hidden fixed inset-0 z-[70] pt-16 pb-10 bg-white dark:bg-slate-950 animate-in fade-in slide-in-from-top-10 overflow-y-auto">
             <nav className="p-4 space-y-2">
               {filteredNav.map((item) => {
                 const Icon = item.icon;

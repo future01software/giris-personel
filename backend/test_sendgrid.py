@@ -1,4 +1,5 @@
 import os
+import pytest
 from dotenv import load_dotenv
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content
@@ -8,9 +9,11 @@ load_dotenv()
 def test_send():
     api_key = os.environ.get("SENDGRID_API_KEY")
     mail_from = os.environ.get("MAIL_FROM")
-    
-    print(f"Using API Key: {api_key[:10]}...")
-    print(f"From: {mail_from}")
+
+    if os.environ.get("RUN_SENDGRID_TEST") != "true":
+        pytest.skip("Canlı SendGrid testi etkin değil")
+    if not api_key or not mail_from:
+        pytest.skip("SendGrid ortam değişkenleri tanımlı değil")
     
     message = Mail(
         from_email=Email(mail_from, "Clear2Work Test"),

@@ -12,10 +12,28 @@ import LocalizedDateInput from '../components/LocalizedDateInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { addOneYear, subtractOneYear } from '../utils/dates';
+import {
+  createLocalDemoDetail,
+  isLocalPreviewHost,
+  LOCAL_DEMO_DOCUMENT_TYPES,
+  LOCAL_DEMO_PERSONNEL,
+} from '../utils/localPreviewData';
 
 const API = `${process.env.REACT_APP_BACKEND_URL || 'http://' + window.location.hostname + ':8000'}/api`;
 
 const toDateInput = (v) => (v ? String(v).slice(0, 10) : '');
+const isLocalDemoPerson = (personnelId) => isLocalPreviewHost() && personnelId === LOCAL_DEMO_PERSONNEL.id;
+const getLocalDocumentTiming = (expiryDate, warningDays = 30) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiry = new Date(`${toDateInput(expiryDate)}T00:00:00`);
+  const days = Math.ceil((expiry.getTime() - today.getTime()) / 86400000);
+  return {
+    days_until_expiry: days,
+    status: days < 0 ? 'expired' : days <= warningDays ? 'warning' : 'valid',
+  };
+};
 
 const PersonnelDetail = () => {
   const { id } = useParams();
@@ -28,6 +46,8 @@ const PersonnelDetail = () => {
 
   const [isEditing, setIsEditing] = useState(false);
   const [isAddDocOpen, setIsAddDocOpen] = useState(false);
+  const [editingDocumentId, setEditingDocumentId] = useState(null);
+  const [editDocumentForm, setEditDocumentForm] = useState({ expiry_date: '', notes: '' });
 
   const [editForm, setEditForm] = useState({
     full_name: '',
@@ -62,6 +82,26 @@ const PersonnelDetail = () => {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+
+    if (isLocalDemoPerson(id)) {
+      const detailData = createLocalDemoDetail();
+      setData(detailData);
+      setDocumentTypes(LOCAL_DEMO_DOCUMENT_TYPES);
+      setEditForm({
+        full_name: detailData.personnel.full_name,
+        tc_number: detailData.personnel.tc_number,
+        company: detailData.personnel.company,
+        phone: detailData.personnel.phone,
+        license_plate: detailData.personnel.license_plate,
+        photo_url: '',
+        assignment_start: detailData.personnel.assignment_start,
+        assignment_end: detailData.personnel.assignment_end,
+        entry_blocked: false,
+        entry_block_reason: '',
+      });
+      setLoading(false);
+      return;
+    }
 
     // 1) Personel detay - bu kritik, retry ile dene
     let detailData = null;
@@ -122,8 +162,33 @@ const PersonnelDetail = () => {
   const handleAddDocument = async (e) => {
     e.preventDefault();
     try {
+      if (isLocalDemoPerson(id)) {
+        const documentType = documentTypes.find((type) => type.id === docForm.document_type_id);
+        const expiryDate = addOneYear(docForm.expiry_date);
+        const timing = getLocalDocumentTiming(expiryDate, documentType?.warning_days);
+        setData((current) => ({
+          ...current,
+          documents: [
+            ...current.documents,
+            {
+              id: `local-doc-${Date.now()}`,
+              personnel_id: id,
+              document_type_id: documentType.id,
+              document_type: documentType,
+              expiry_date: expiryDate,
+              notes: docForm.notes,
+              ...timing,
+            },
+          ],
+        }));
+        toast.success(t('documentAdded'));
+        setIsAddDocOpen(false);
+        setDocForm({ document_type_id: '', expiry_date: '', notes: '' });
+        return;
+      }
       await axios.post(`${API}/documents`, {
         ...docForm,
+        expiry_date: addOneYear(docForm.expiry_date),
         personnel_id: id,
       });
       toast.success(t('documentAdded'));
@@ -136,15 +201,74 @@ const PersonnelDetail = () => {
     }
   };
 
-  const handleDeleteDocument = async (docId) => {
+  const getDocumentRecordKey = (doc) => `${doc.id}:${doc.personnel_id}:${doc.document_type_id}`;
+
+  const handleDeleteDocument = async (doc) => {
     if (!window.confirm(t('confirmDelete'))) return;
     try {
-      await axios.delete(`${API}/documents/${docId}`);
+      if (isLocalDemoPerson(id)) {
+        const recordKey = getDocumentRecordKey(doc);
+        setData((current) => ({
+          ...current,
+          documents: current.documents.filter((item) => getDocumentRecordKey(item) !== recordKey),
+        }));
+        toast.success(t('documentDeleted'));
+        return;
+      }
+      await axios.delete(`${API}/documents/${doc.id}`, {
+        params: {
+          personnel_id: doc.personnel_id,
+          document_type_id: doc.document_type_id,
+        },
+      });
       toast.success(t('documentDeleted'));
       fetchData();
     } catch (error) {
       console.error('Delete document failed:', error);
       toast.error(t('documentDeleteFailed'));
+    }
+  };
+
+  const startEditingDocument = (doc) => {
+    setEditingDocumentId(getDocumentRecordKey(doc));
+    setEditDocumentForm({
+      expiry_date: subtractOneYear(toDateInput(doc.expiry_date)),
+      notes: doc.notes || '',
+    });
+  };
+
+  const handleUpdateDocument = async (doc) => {
+    try {
+      if (isLocalDemoPerson(id)) {
+        const expiryDate = addOneYear(editDocumentForm.expiry_date);
+        const timing = getLocalDocumentTiming(expiryDate, doc.document_type?.warning_days);
+        const recordKey = getDocumentRecordKey(doc);
+        setData((current) => ({
+          ...current,
+          documents: current.documents.map((item) => (
+            getDocumentRecordKey(item) === recordKey
+              ? { ...item, expiry_date: expiryDate, notes: editDocumentForm.notes, ...timing }
+              : item
+          )),
+        }));
+        toast.success(t('documentUpdated', 'Evrak güncellendi'));
+        setEditingDocumentId(null);
+        setEditDocumentForm({ expiry_date: '', notes: '' });
+        return;
+      }
+      await axios.put(`${API}/documents/${doc.id}`, {
+        personnel_id: doc.personnel_id,
+        document_type_id: doc.document_type_id,
+        expiry_date: addOneYear(editDocumentForm.expiry_date),
+        notes: editDocumentForm.notes,
+      });
+      toast.success(t('documentUpdated', 'Evrak güncellendi'));
+      setEditingDocumentId(null);
+      setEditDocumentForm({ expiry_date: '', notes: '' });
+      fetchData();
+    } catch (error) {
+      console.error('Update document failed:', error);
+      toast.error(t('documentUpdateFailed', 'Evrak güncellenemedi'));
     }
   };
 
@@ -479,7 +603,7 @@ const PersonnelDetail = () => {
 
                 <div>
                   <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    {t('expiryDate')} *
+                    {i18n.language === 'tr' ? 'Evrak Tarihi' : 'Document Date'} *
                   </Label>
                   <LocalizedDateInput
                     value={docForm.expiry_date}
@@ -488,6 +612,11 @@ const PersonnelDetail = () => {
                     className={inputDark}
                     data-testid="doc-expiry-input"
                   />
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    {i18n.language === 'tr'
+                      ? 'Geçerlilik bitişi, seçtiğiniz evrak tarihinden otomatik olarak 1 yıl sonrası kaydedilir.'
+                      : 'The expiry date is automatically saved as 1 year after the selected document date.'}
+                  </p>
                 </div>
               </div>
 
@@ -524,9 +653,9 @@ const PersonnelDetail = () => {
 
                 return (
                   <div
-                    key={doc.id}
+                    key={getDocumentRecordKey(doc)}
                     className={`flex items-center justify-between p-4 rounded-lg border ${getDocRowClass(doc.status)}`}
-                    data-testid={`document-${doc.id}`}
+                    data-testid={`document-${getDocumentRecordKey(doc)}`}
                   >
                     <div className="flex-1">
                       <p className={`font-semibold ${titleText}`}>
@@ -546,15 +675,67 @@ const PersonnelDetail = () => {
                           </span>
                         )}
                       </p>
+                      {editingDocumentId === getDocumentRecordKey(doc) && (
+                        <div className="mt-4 max-w-md space-y-3">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            {i18n.language === 'tr' ? 'Evrak Tarihi' : 'Document Date'}
+                          </Label>
+                          <LocalizedDateInput
+                            value={editDocumentForm.expiry_date}
+                            onChange={(e) => setEditDocumentForm({ ...editDocumentForm, expiry_date: e.target.value })}
+                            className={inputDark}
+                          />
+                          <Input
+                            value={editDocumentForm.notes}
+                            onChange={(e) => setEditDocumentForm({ ...editDocumentForm, notes: e.target.value })}
+                            placeholder={t('notes')}
+                            className={inputDark}
+                          />
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {i18n.language === 'tr'
+                              ? 'Seçilen tarihin 1 yıl sonrası geçerlilik bitişi olarak kaydedilir.'
+                              : 'One year after the selected date is saved as the expiry date.'}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-3">
                       <StatusBadge status={doc.status} />
+                      {editingDocumentId === getDocumentRecordKey(doc) ? (
+                        <>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleUpdateDocument(doc)}
+                            title={t('save')}
+                          >
+                            <Save className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => setEditingDocumentId(null)}
+                            title={t('cancel')}
+                          >
+                            <X className="w-4 h-4 text-slate-500" />
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => startEditingDocument(doc)}
+                          title={t('edit')}
+                        >
+                          <Edit className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        </Button>
+                      )}
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={() => handleDeleteDocument(doc.id)}
-                        data-testid={`delete-doc-${doc.id}`}
+                        onClick={() => handleDeleteDocument(doc)}
+                        data-testid={`delete-doc-${getDocumentRecordKey(doc)}`}
                         title={t('delete')}
                       >
                         <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />

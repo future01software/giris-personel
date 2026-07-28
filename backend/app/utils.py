@@ -1,4 +1,5 @@
 import re
+from uuid import uuid4
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -40,7 +41,7 @@ def prepare_turkish_search(q: str):
     return pattern
 
 def new_id(prefix: str) -> str:
-    return f"{prefix}_{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+    return f"{prefix}_{uuid4().hex}"
 
 
 def parse_dt_safe(value) -> Optional[datetime]:

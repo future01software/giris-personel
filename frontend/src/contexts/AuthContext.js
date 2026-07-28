@@ -83,9 +83,27 @@ export const AuthProvider = ({ children }) => {
     }
   }, [applyToken, logout]);
 
+  const previewLogin = useCallback((role) => {
+    if (!['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+      return false;
+    }
+
+    setToken(null);
+    localStorage.removeItem(TOKEN_KEY);
+    applyToken(null);
+    setUser({
+      id: `local-preview-${role}`,
+      username: `onizleme.${role}`,
+      full_name: role === 'security' ? 'Güvenlik Önizleme' : 'Admin Önizleme',
+      role,
+    });
+    setLoading(false);
+    return true;
+  }, [applyToken]);
+
   const value = useMemo(
-    () => ({ user, token, login, logout, loading }),
-    [user, token, login, logout, loading]
+    () => ({ user, token, login, previewLogin, logout, loading }),
+    [user, token, login, previewLogin, logout, loading]
   );
 
   return (
