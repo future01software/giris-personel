@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import axios from 'axios';
 
 import { generateRandomTC } from '../utils/generators';
+import { addOneYear } from '../utils/dates';
 
 const API = `${process.env.REACT_APP_BACKEND_URL || 'http://' + window.location.hostname + ':8000'}/api`;
 
@@ -70,7 +71,7 @@ const PersonnelAdd = () => {
             axios.post(`${API}/documents`, {
               personnel_id: personnelId,
               document_type_id: typeId,
-              expiry_date: date,
+              expiry_date: addOneYear(date),
               notes: '',
             })
           );
@@ -252,7 +253,9 @@ const PersonnelAdd = () => {
                   />
 
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                    {t('warningDays')}: {type.warning_days}
+                    {i18n.language === 'tr'
+                      ? `Seçilen evrak tarihinden 1 yıl sonrası geçerlilik bitişi olarak kaydedilir. Uyarı: ${type.warning_days} gün`
+                      : `The expiry date is saved as 1 year after the selected document date. Warning: ${type.warning_days} days`}
                   </p>
                 </div>
               ))}

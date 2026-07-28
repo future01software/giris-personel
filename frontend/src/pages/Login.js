@@ -9,6 +9,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,8 @@ const API = `${process.env.REACT_APP_BACKEND_URL || 'http://' + window.location.
 
 const Login = () => {
   const { t, i18n } = useTranslation();
-  const { login } = useAuth();
+  const { login, previewLogin } = useAuth();
+  const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
 
   const [username, setUsername] = useState('');
@@ -85,6 +87,14 @@ const Login = () => {
       setLoading(false);
     }
   };
+
+  const handlePreviewLogin = (role) => {
+    if (previewLogin(role)) {
+      navigate(role === 'security' ? '/security-check' : '/dashboard');
+    }
+  };
+
+  const isLocalPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] dark:bg-slate-950 p-4 font-['Segoe_UI',_Arial,_sans-serif] transition-colors duration-300">
@@ -189,6 +199,32 @@ const Login = () => {
             {loading ? t('loginLoading') : t('login')}
           </Button>
         </form>
+
+        {isLocalPreview && (
+          <div className="mt-5 border-t border-slate-200 pt-5 dark:border-white/10">
+            <p className="mb-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Yalnızca Yerel Önizleme
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handlePreviewLogin('admin')}
+                className="h-11 rounded-xl border-slate-200 text-xs font-bold dark:border-white/10"
+              >
+                Admin Panelini Gör
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handlePreviewLogin('security')}
+                className="h-11 rounded-xl border-slate-200 text-xs font-bold dark:border-white/10"
+              >
+                Güvenlik Panelini Gör
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="mt-6 text-center space-y-3">
           <button onClick={() => setForgotPasswordOpen(true)} className="text-xs font-bold text-slate-400 dark:text-slate-500 hover:text-slate-950 dark:hover:text-white transition-colors">
