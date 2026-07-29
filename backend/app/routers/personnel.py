@@ -615,7 +615,7 @@ async def bulk_import_personnel(file: UploadFile = File(...), current_user: dict
                                         "personnel_id": personnel_id,
                                         "document_type_id": doc_type_id,
                                         "expiry_date": expiry_date,
-                                        "notes": "Imported from Excel",
+                                        "notes": "Excel'den aktarıldı",
                                         "created_at": datetime.now(timezone.utc).isoformat()
                                     })
 

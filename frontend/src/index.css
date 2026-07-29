@@ -267,7 +267,19 @@ html.theme-transitioning img {
   }
 
   .localized-date-input::-webkit-datetime-edit {
+    opacity: 0;
+  }
+
+  .localized-date-input::-webkit-datetime-edit-fields-wrapper,
+  .localized-date-input::-webkit-datetime-edit-text,
+  .localized-date-input::-webkit-datetime-edit-day-field,
+  .localized-date-input::-webkit-datetime-edit-month-field,
+  .localized-date-input::-webkit-datetime-edit-year-field {
     color: transparent;
+  }
+
+  .localized-date-input {
+    caret-color: transparent;
   }
 }
 

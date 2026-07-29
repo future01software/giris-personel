@@ -233,7 +233,10 @@ const PersonnelDetail = () => {
     setEditingDocumentId(getDocumentRecordKey(doc));
     setEditDocumentForm({
       expiry_date: subtractOneYear(toDateInput(doc.expiry_date)),
-      notes: doc.notes || '',
+      notes:
+        doc.notes === 'Imported from Excel'
+          ? (i18n.language === 'tr' ? "Excel'den aktarıldı" : doc.notes)
+          : (doc.notes || ''),
     });
   };
 
