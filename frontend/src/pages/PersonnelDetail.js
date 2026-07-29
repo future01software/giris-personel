@@ -108,6 +108,18 @@ const PersonnelDetail = () => {
     try {
       const detailRes = await fetchWithRetry(`${API}/personnel/${id}`);
       detailData = detailRes.data;
+      if (i18n.language?.toLowerCase().startsWith('tr') && Array.isArray(detailData.documents)) {
+        detailData = {
+          ...detailData,
+          documents: detailData.documents.map((document) => ({
+            ...document,
+            notes:
+              document.notes === 'Imported from Excel'
+                ? "Excel'den aktar\u0131ld\u0131"
+                : document.notes,
+          })),
+        };
+      }
       setData(detailData);
 
       const p = detailData.personnel;
@@ -141,7 +153,7 @@ const PersonnelDetail = () => {
     }
 
     setLoading(false);
-  }, [id, t, fetchWithRetry]);
+  }, [id, t, i18n.language, fetchWithRetry]);
 
   useEffect(() => {
     fetchData();
