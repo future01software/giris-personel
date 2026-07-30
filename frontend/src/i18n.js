@@ -472,6 +472,10 @@ const resources = {
 
                   // ========== PERSONEL YÖNETİMİ ==========
                   personnelLoadFailed: 'Personel yüklenemedi',
+                  downloadPersonnelBackup: 'Personel Excel Yedeği',
+                  preparingExcel: 'Excel hazırlanıyor...',
+                  personnelBackupDownloaded: 'Personel Excel yedeği indirildi',
+                  personnelBackupFailed: 'Personel Excel yedeği oluşturulamadı',
                   personnelDeleted: 'Personel silindi',
                   personnelDeleteFailed: 'Personel silinemedi',
                   bulkDeleteSuccess: '✅ {{count}} kayıt silindi',
@@ -1058,6 +1062,10 @@ const resources = {
                   // ✅ Personnel Page
                   personnelLoadFailed: 'Failed to load personnel',
                   personnelDeleted: 'Personnel deleted',
+                  downloadPersonnelBackup: 'Personnel Excel Backup',
+                  preparingExcel: 'Preparing Excel...',
+                  personnelBackupDownloaded: 'Personnel Excel backup downloaded',
+                  personnelBackupFailed: 'Personnel Excel backup could not be created',
                   personnelDeleteFailed: 'Failed to delete personnel',
                   bulkDeleteSuccess: '✅ {{count}} records deleted',
                   bulkDeleteFailed: 'Bulk delete failed',

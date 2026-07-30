@@ -1,16 +1,38 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi.responses import StreamingResponse
 import pandas as pd
 import io
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
+from openpyxl import Workbook
+from openpyxl.formatting.rule import FormulaRule
+from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
 
 from app.models import PersonnelCreate, BulkDeleteRequest
 from app.db import db, DEMO_MODE
 from app.deps import get_current_user, require_role
-from app.utils import new_id, compute_can_enter_map, prepare_turkish_search
+from app.utils import new_id, compute_can_enter_map, prepare_turkish_search, parse_dt_safe
 
 router = APIRouter(prefix="/personnel", tags=["personnel"])
 TR_TZ = ZoneInfo("Europe/Istanbul")
+
+
+def _excel_text(value) -> str:
+    text = str(value or "")
+    if text.startswith(("=", "+", "-", "@")):
+        return f"'{text}"
+    return text
+
+
+def _excel_date(value):
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=None)
+    except (TypeError, ValueError):
+        return _excel_text(value)
 
 
 def _log_timestamp(log: dict) -> float:
@@ -296,6 +318,191 @@ async def get_personnel_companies(current_user: dict = Depends(get_current_user)
     companies = [str(c).strip() for c in companies if c and str(c).strip()]
     companies.sort()
     return {"companies": companies}
+
+
+@router.get("/export/excel")
+async def export_personnel_excel(current_user: dict = Depends(get_current_user)):
+    await require_role(current_user, ["admin"])
+
+    personnel = await db.personnel.find({}, {"_id": 0}).sort("full_name", 1).to_list(200000)
+    document_types = await db.document_types.find({}, {"_id": 0}).sort("name_tr", 1).to_list(1000)
+    documents = await db.personnel_documents.find({}, {"_id": 0}).to_list(500000)
+
+    document_by_person = {}
+    for document in documents:
+        personnel_id = document.get("personnel_id")
+        document_type_id = document.get("document_type_id")
+        if not personnel_id or not document_type_id:
+            continue
+
+        key = (personnel_id, document_type_id)
+        current = document_by_person.get(key)
+        if current is None or str(document.get("expiry_date") or "") > str(current.get("expiry_date") or ""):
+            document_by_person[key] = document
+
+    can_enter_map = await compute_can_enter_map(personnel)
+    mandatory_document_types = [item for item in document_types if item.get("is_mandatory")]
+    now = datetime.now(timezone.utc)
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Personel ve Evraklar"
+    sheet.sheet_view.showGridLines = False
+    sheet.freeze_panes = "A4"
+
+    export_time = datetime.now(TR_TZ)
+    sheet["A1"] = "Clear2Work Personel ve Evrak Takip Yedeği"
+    sheet["A1"].font = Font(size=16, bold=True, color="FFFFFF")
+    sheet["A1"].fill = PatternFill("solid", fgColor="0B4778")
+    sheet["A2"] = f"Oluşturulma: {export_time.strftime('%d.%m.%Y %H:%M')} — Giriş/çıkış kayıtları dahil değildir."
+    sheet["A2"].font = Font(size=10, italic=True, color="52677D")
+
+    base_headers = [
+        "Ad Soyad",
+        "TC Kimlik No",
+        "Firma",
+        "Telefon",
+        "Plaka",
+        "Görevlendirme Başlangıç",
+        "Görevlendirme Bitiş",
+        "Giriş Yetkisi",
+        "Engel Nedeni",
+    ]
+    headers = list(base_headers)
+    for document_type in document_types:
+        name = document_type.get("name_tr") or document_type.get("name_en") or "Evrak"
+        headers.extend([f"{name} Son Geçerlilik", f"{name} Kalan Gün", f"{name} Durum"])
+
+    last_column = get_column_letter(len(headers))
+    sheet.merge_cells(f"A1:{last_column}1")
+    sheet.merge_cells(f"A2:{last_column}2")
+    sheet.append([])
+    sheet.append(headers)
+
+    header_fill = PatternFill("solid", fgColor="0B4778")
+    header_font = Font(bold=True, color="FFFFFF")
+    border = Border(bottom=Side(style="thin", color="CBD5E1"))
+    for cell in sheet[4]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = border
+    sheet.row_dimensions[4].height = 42
+
+    for row_number, person in enumerate(personnel, start=5):
+        personnel_id = person.get("id")
+        can_enter = bool(can_enter_map.get(personnel_id, True))
+        restriction_reasons = []
+        if person.get("entry_blocked") is True or person.get("is_blocked") is True or person.get("blocked") is True:
+            manual_reason = person.get("entry_block_reason") or person.get("block_reason")
+            restriction_reasons.append(
+                f"Yönetici tarafından engellenmiş{f': {manual_reason}' if manual_reason else ''}"
+            )
+
+        assignment_start = parse_dt_safe(person.get("assignment_start"))
+        assignment_end = parse_dt_safe(person.get("assignment_end"))
+        if assignment_start and assignment_start > now:
+            restriction_reasons.append("Görevlendirme henüz başlamamış")
+        if assignment_end and assignment_end < now:
+            restriction_reasons.append("Görevlendirme tarihi sona ermiş")
+
+        for document_type in mandatory_document_types:
+            document = document_by_person.get((personnel_id, document_type.get("id")))
+            document_name = document_type.get("name_tr") or document_type.get("name_en") or "Zorunlu evrak"
+            if not document:
+                restriction_reasons.append(f"Zorunlu belge eksik: {document_name}")
+                continue
+            expiry_date = parse_dt_safe(document.get("expiry_date"))
+            if not expiry_date or expiry_date < now:
+                restriction_reasons.append(f"Belge süresi dolmuş: {document_name}")
+
+        row = [
+            _excel_text(person.get("full_name")),
+            _excel_text(person.get("tc_number")),
+            _excel_text(person.get("company")),
+            _excel_text(person.get("phone")),
+            _excel_text(person.get("license_plate")),
+            _excel_date(person.get("assignment_start")),
+            _excel_date(person.get("assignment_end")),
+            "Uygun" if can_enter else "Kısıtlı",
+            "; ".join(restriction_reasons),
+        ]
+        sheet.append(row)
+
+        sheet.cell(row_number, 6).number_format = "dd.mm.yyyy"
+        sheet.cell(row_number, 7).number_format = "dd.mm.yyyy"
+
+        column = len(base_headers) + 1
+        for document_type in document_types:
+            document = document_by_person.get((personnel_id, document_type.get("id")))
+            expiry_value = document.get("expiry_date") if document else None
+            expiry_cell = sheet.cell(row_number, column)
+            days_cell = sheet.cell(row_number, column + 1)
+            status_cell = sheet.cell(row_number, column + 2)
+
+            if expiry_value:
+                expiry_cell.value = _excel_date(expiry_value)
+                if isinstance(expiry_cell.value, datetime):
+                    expiry_cell.number_format = "dd.mm.yyyy"
+
+            expiry_ref = expiry_cell.coordinate
+            days_ref = days_cell.coordinate
+            warning_days = int(document_type.get("warning_days") or 30)
+            days_cell.value = f'=IF({expiry_ref}="","",{expiry_ref}-TODAY())'
+            status_cell.value = (
+                f'=IF({expiry_ref}="","Eksik",'
+                f'IF({days_ref}<0,"Süresi Doldu",'
+                f'IF({days_ref}<={warning_days},"Yaklaşıyor","Geçerli")))'
+            )
+            days_cell.number_format = "0"
+            column += 3
+
+    max_row = max(sheet.max_row, 5)
+    sheet.auto_filter.ref = f"A4:{last_column}{max_row}"
+
+    widths = [28, 16, 24, 17, 14, 20, 20, 15, 30]
+    for index, width in enumerate(widths, start=1):
+        sheet.column_dimensions[get_column_letter(index)].width = width
+    for index in range(len(base_headers) + 1, len(headers) + 1, 3):
+        sheet.column_dimensions[get_column_letter(index)].width = 24
+        sheet.column_dimensions[get_column_letter(index + 1)].width = 13
+        sheet.column_dimensions[get_column_letter(index + 2)].width = 16
+
+    for row in sheet.iter_rows(min_row=5, max_row=max_row):
+        for cell in row:
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+            cell.border = Border(bottom=Side(style="hair", color="E2E8F0"))
+
+    green_fill = PatternFill("solid", fgColor="DCFCE7")
+    yellow_fill = PatternFill("solid", fgColor="FEF3C7")
+    red_fill = PatternFill("solid", fgColor="FEE2E2")
+    sheet.conditional_formatting.add(
+        f"H5:H{max_row}",
+        FormulaRule(formula=["$H5=\"Uygun\""], fill=green_fill),
+    )
+    sheet.conditional_formatting.add(
+        f"H5:H{max_row}",
+        FormulaRule(formula=["$H5=\"Kısıtlı\""], fill=red_fill),
+    )
+    for status_column in range(len(base_headers) + 3, len(headers) + 1, 3):
+        letter = get_column_letter(status_column)
+        target = f"{letter}5:{letter}{max_row}"
+        sheet.conditional_formatting.add(target, FormulaRule(formula=[f'{letter}5="Geçerli"'], fill=green_fill))
+        sheet.conditional_formatting.add(target, FormulaRule(formula=[f'{letter}5="Yaklaşıyor"'], fill=yellow_fill))
+        sheet.conditional_formatting.add(
+            target,
+            FormulaRule(formula=[f'OR({letter}5="Süresi Doldu",{letter}5="Eksik")'], fill=red_fill),
+        )
+
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    filename = f"Clear2Work_Personel_Yedegi_{export_time.strftime('%Y-%m-%d')}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{personnel_id}")

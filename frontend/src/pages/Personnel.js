@@ -88,6 +88,7 @@ const Personnel = () => {
   const [initialLoading, setInitialLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -351,6 +352,31 @@ const Personnel = () => {
     }
   };
 
+  const downloadPersonnelBackup = async () => {
+    setExporting(true);
+    try {
+      const response = await axios.get(`${API}/personnel/export/excel`, {
+        responseType: 'blob',
+      });
+      const disposition = response.headers['content-disposition'] || '';
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
+      const filename = filenameMatch?.[1] || `Clear2Work_Personel_Yedegi_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(t('personnelBackupDownloaded'));
+    } catch (error) {
+      toast.error(error.response?.data?.detail || t('personnelBackupFailed'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (initialLoading) {
     return (
       //      <Layout>
@@ -378,10 +404,19 @@ const Personnel = () => {
     //    <Layout>
     <div className="space-y-4">
       {/* Header - Dashboard Style */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="page-title">
           {t('personnel')}
         </h1>
+        <Button
+          type="button"
+          onClick={downloadPersonnelBackup}
+          disabled={exporting}
+          className="w-full sm:w-auto rounded-xl bg-[#0B4778] text-white hover:bg-[#083A63]"
+        >
+          <Download className="mr-2 h-4 w-4" />
+          {exporting ? t('preparingExcel') : t('downloadPersonnelBackup')}
+        </Button>
       </div>
 
       {/* Premium Action Grid */}
