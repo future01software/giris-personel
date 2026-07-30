@@ -306,7 +306,7 @@ const Layout = ({ children }) => {
         </header>
 
         {/* Nested Content Scroll Area */}
-        <div className="flex-1 overflow-y-auto px-3 pb-24 md:px-7 md:pb-8 custom-scrollbar relative z-10">
+        <div className="mobile-safe-content flex-1 overflow-y-auto px-3 md:px-7 custom-scrollbar relative z-10">
           <div className="max-w-[1600px] mx-auto py-6">
             {children}
           </div>
@@ -317,7 +317,7 @@ const Layout = ({ children }) => {
           MOBILE SECTION
       ======================== */}
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 w-full z-[60] bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 h-16 px-4 flex items-center justify-between">
+      <div className="mobile-safe-header md:hidden fixed top-0 w-full z-[60] bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 flex items-center justify-between">
         <Link to="/dashboard" className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-[#eef5fb] text-[#0a3b67]">
             <ShieldCheck className="h-5 w-5" />
@@ -334,7 +334,7 @@ const Layout = ({ children }) => {
       {/* Mobile Menu Overlay */}
       {
         mobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-[70] pt-16 pb-10 bg-white dark:bg-slate-950 animate-in fade-in slide-in-from-top-10 overflow-y-auto">
+          <div className="mobile-safe-menu md:hidden fixed inset-0 z-[70] bg-white dark:bg-slate-950 animate-in fade-in slide-in-from-top-10 overflow-y-auto">
             <nav className="p-4 space-y-2">
               {filteredNav.map((item) => {
                 const Icon = item.icon;
