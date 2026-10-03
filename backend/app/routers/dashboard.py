@@ -4,6 +4,9 @@ import time
 from fastapi import APIRouter, Depends
 from app.db import db, DEMO_MODE
 from app.deps import get_current_user
+from app.presence import PRESENCE, ensure_presence_ready
+
+TR_TZ = timezone(timedelta(hours=3))
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -32,20 +35,32 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
 
     total_personnel = await db.personnel.count_documents({})
 
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    # "Bugün" Türkiye saatine göre (UTC gece yarısı değil)
+    today_start = datetime.now(TR_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_q = {"$or": [
+        {"timestamp_ts": {"$gte": today_start.timestamp()}},
+        # eski kayıtlar: sadece ISO string var (UTC olarak yazılmış)
+        {"timestamp_ts": {"$exists": False},
+         "timestamp": {"$gte": today_start.astimezone(timezone.utc).isoformat()}},
+    ]}
 
-    total_entries_today = await db.entry_logs.count_documents({"timestamp": {"$gte": today_start.isoformat()}})
-    approved_today = await db.entry_logs.count_documents({"timestamp": {"$gte": today_start.isoformat()}, "decision": "approved"})
-    rejected_today = await db.entry_logs.count_documents({"timestamp": {"$gte": today_start.isoformat()}, "decision": "rejected"})
+    total_entries_today = await db.entry_logs.count_documents(today_q)
+    # Yeni kayıtlar decision "IN"/"OUT" yazıyor; eski kayıtlar "approved"/"rejected"
+    approved_today = await db.entry_logs.count_documents(
+        {"$and": [today_q, {"$or": [{"action": "IN"}, {"decision": {"$in": ["approved", "APPROVED", "IN"]}}]}]}
+    )
+    rejected_today = await db.entry_logs.count_documents(
+        {"$and": [today_q, {"decision": {"$in": ["rejected", "REJECTED"]}}]}
+    )
 
     # Bu endpoint zaten ayrı bir mantıkla yazılmıştı; BOZMADAN taşıyoruz.
-    all_personnel = await db.personnel.find({}, {"_id": 0, "id": 1, "assignment_end": 1}).to_list(1000)
+    all_personnel = await db.personnel.find({}, {"_id": 0, "id": 1, "assignment_end": 1}).to_list(None)
     doc_types = await db.document_types.find({}, {"_id": 0}).to_list(100)
     doc_types_map = {dt["id"]: dt for dt in doc_types}
 
     all_documents = await db.personnel_documents.find(
         {}, {"_id": 0, "personnel_id": 1, "document_type_id": 1, "expiry_date": 1}
-    ).to_list(10000)
+    ).to_list(None)
 
     documents_by_personnel = {}
     for doc in all_documents:
@@ -112,31 +127,6 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     return result
 
 async def _calculate_inside_count() -> int:
-    # Use timestamp_ts (numeric epoch) for reliable 24h lookback
-    lookback_ts = (datetime.now(timezone.utc) - timedelta(hours=24)).timestamp()
-    
-    # Try timestamp_ts first (numeric, reliable), fallback to string
-    query = {"$or": [
-        {"timestamp_ts": {"$gte": lookback_ts}},
-        {"created_at_ts": {"$gte": lookback_ts}},
-    ]}
-    
-    status_map = {}  # pid -> "IN" | "OUT"
-
-    cursor = db.entry_logs.find(query).sort([("timestamp_ts", 1), ("created_at_ts", 1)])
-    
-    async for log in cursor:
-        pid = log.get("person_id") or log.get("personnel_id")
-        if not pid: 
-            continue
-        
-        action_raw = log.get("action") or log.get("decision") or ""
-        a = str(action_raw).upper().strip()
-        
-        if a in ("IN", "APPROVED", "ALLOW", "ALLOWED", "ACCEPTED", "OK"):
-            status_map[pid] = "IN"
-        elif a in ("OUT", "REJECTED", "DENY", "DENIED", "NOT_OK", "NO"):
-            status_map[pid] = "OUT"
-
-    count = sum(1 for status in status_map.values() if status == "IN")
-    return count
+    # Son hareketi IN olan herkes (24 saat sınırı yok; uzun süre içeride kalan da sayılır)
+    await ensure_presence_ready()
+    return await db[PRESENCE].count_documents({"status": "IN"})
