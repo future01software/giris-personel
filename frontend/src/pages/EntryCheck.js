@@ -66,20 +66,9 @@ const EntryCheck = () => {
 
       // Check current status (isInside?) - fetch minimal data
       try {
-        const logsRes = await axios.get(`${API}/entry/logs?limit=20`);
-        const list = Array.isArray(logsRes.data) ? logsRes.data : (logsRes.data?.data || logsRes.data?.items || []);
-        const pid = person.id;
-
-        const my = list.filter((x) => String(x.personnel_id || x.person_id || x.personnel?.id || '') === String(pid))
-          .sort((a, b) => new Date(getLogTs(b) || 0) - new Date(getLogTs(a) || 0));
-
-        if (my.length > 0) {
-          const last = my[0];
-          const a = normalizeAction(last);
-          setIsInside(a === 'in');
-        } else {
-          setIsInside(false);
-        }
+        // Son 20 kayda bakıyordu; kişi daha önce girdiyse "dışarıda" sanılıyordu
+        const statusRes = await axios.get(`${API}/entry/status/${encodeURIComponent(person.id)}`);
+        setIsInside(statusRes.data?.is_inside === true);
       } catch (e) {
         console.warn('Could not load last entry status', e);
         setIsInside(false);
@@ -90,16 +79,6 @@ const EntryCheck = () => {
     }
   };
 
-  // Helper Functions
-  const normalizeAction = (log) => {
-    const raw = log?.action ?? log?.type ?? log?.decision ?? log?.status ?? '';
-    const v = String(raw).trim().toLowerCase();
-    if (['in', 'entry', 'enter', 'entered', 'approved', 'allow', 'allowed', 'ok'].includes(v)) return 'in';
-    if (['out', 'exit', 'exited', 'rejected', 'deny', 'denied', 'no'].includes(v)) return 'out';
-    return '';
-  };
-
-  const getLogTs = (x) => x?.timestamp || x?.created_at || x?.entry_time || x?.exit_time || '';
 
   const canEnter = () => {
     if (!personDetail) return false;
@@ -143,7 +122,7 @@ const EntryCheck = () => {
       setIsInside(action === 'IN');
     } catch (e) {
       console.error('Entry log failed:', e);
-      toast.error(t('other') || 'Error');
+      toast.error(e?.response?.data?.detail || t('other') || 'Error');
     } finally {
       setEntryLoading(false);
     }

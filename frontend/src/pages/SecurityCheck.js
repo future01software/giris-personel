@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation, Trans } from 'react-i18next';
-import { useAuth } from '../contexts/AuthContext';
+import { useWebSocket } from '../contexts/WebSocketContext';
 import { Search, MapPin, User, DoorOpen, DoorClosed, LogIn, LogOut, Moon, Sun, Clock, FileText, CheckCircle, XCircle, AlertTriangle, Filter, Calendar, ChevronRight, Bell } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import axios from 'axios';
@@ -45,37 +45,6 @@ const formatDateTime = (value) => {
   });
 };
 
-const normalizeAction = (log) => {
-  const raw = log?.action ?? log?.type ?? log?.decision ?? log?.status ?? '';
-  const v = String(raw).trim().toLowerCase();
-
-  if (v === 'in' || v === 'entry' || v === 'enter' || v === 'entered') return 'in';
-  if (v === 'out' || v === 'exit' || v === 'exited') return 'out';
-  if (v === 'approved' || v === 'allow' || v === 'allowed' || v === 'accepted' || v === 'ok')
-    return 'in';
-  if (v === 'rejected' || v === 'deny' || v === 'denied' || v === 'not_ok' || v === 'no')
-    return 'out';
-
-  return '';
-};
-
-const normalizeDecision = (x) => {
-  const v = normalizeAction(x);
-  if (v === 'in') return 'IN';
-  if (v === 'out') return 'OUT';
-  return '';
-};
-
-const getLogTs = (x) =>
-  x?.timestamp ||
-  x?.created_at ||
-  x?.createdAt ||
-  x?.entry_time ||
-  x?.exit_time ||
-  '';
-
-const getLogGate = (x) => x?.gate || x?.gate_key || x?.gateKey || x?.location_gate || '';
-
 const sameInside = (a = [], b = []) => {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
@@ -88,59 +57,18 @@ const sameInside = (a = [], b = []) => {
   return true;
 };
 
-const computeInsideFromLogs = (logs, gate) => {
-  const latestByPid = new Map();
-
-  for (const x of logs || []) {
-    const pid =
-      x?.personnel_id || x?.personnelId || x?.person_id || x?.personId || x?.personnel?.id;
-
-    if (!pid) continue;
-
-    const g = getLogGate(x);
-    // Gate filtresi: loglarda gate varsa uygula, yoksa genel liste olur
-    if (gate && g && String(g) !== String(gate)) continue;
-
-    const ts = new Date(getLogTs(x) || 0).getTime();
-    const prev = latestByPid.get(String(pid));
-    if (!prev || ts > prev.ts) {
-      latestByPid.set(String(pid), { ts, log: x });
-    }
-  }
-
-  const items = [];
-  for (const [pid, v] of latestByPid.entries()) {
-    const dec = normalizeDecision(v.log);
-    if (dec !== 'IN') continue;
-
-    const p = v.log?.personnel || v.log?.person || {};
-    const fullName =
-      v.log?.full_name ||
-      p?.full_name ||
-      `${p?.first_name || ''} ${p?.last_name || ''}`.trim() ||
-      `ID: ${pid}`;
-
-    const g = getLogGate(v.log) || '';
-    const gateLabel = GATES.find((z) => z.value === g)?.label || '';
-
-    items.push({
-      personnel_id: pid,
-      full_name: fullName,
-      company: v.log?.company || p?.company || '',
-      last_ts: v.ts,
-      gate: g,
-      gate_label: gateLabel,
-    });
-  }
-
-  // En yeni giriş üstte
-  items.sort((a, b) => (b.last_ts || 0) - (a.last_ts || 0));
-  return items;
-};
+// Sunucudaki "içeride" kaydını listede kullanılan biçime çevirir
+const toInsideItem = (x) => ({
+  personnel_id: x.personnel_id,
+  full_name: x.full_name || `ID: ${x.personnel_id}`,
+  company: x.company || '',
+  last_ts: Number(x.last_ts || 0) * 1000, // sunucu saniye döner
+  gate: x.gate || '',
+  gate_label: GATES.find((z) => z.value === x.gate)?.label || '',
+});
 
 const SecurityCheck = () => {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
 
   const [searchForm, setSearchForm] = useState({ name: '', surname: '', tc: '' });
   const [searchResults, setSearchResults] = useState([]);
@@ -190,21 +118,20 @@ const SecurityCheck = () => {
 
     setEntryLoading(true);
     try {
-      const payload = {
+      // Eskiden var olmayan POST /entry-logs adresine gidiyordu (405) -> buton hiç çalışmıyordu
+      await axios.post(`${API}/entry/decision`, {
         personnel_id: personInfo.personnel_id,
-        direction: 'OUT',
+        decision: 'OUT',
+        reason: '',
         gate: selectedGate,
-        action_by: user?.full_name || 'Security'
-      };
-
-      await axios.post(`${API}/entry-logs`, payload);
+      });
       toast.success(t('exitSaved'));
 
-      // Refresh lists
-      fetchInside();
+      if (String(selectedPerson?.id) === String(personInfo.personnel_id)) setIsInside(false);
+      fetchInside({ silent: true });
     } catch (error) {
       console.error(error);
-      toast.error(t('operationFailed'));
+      toast.error(error?.response?.data?.detail || t('operationFailed'));
     } finally {
       setEntryLoading(false);
     }
@@ -250,12 +177,10 @@ const SecurityCheck = () => {
     if (el) insideScrollTopRef.current = el.scrollTop;
 
     try {
-      const logsRes = await axios.get(`${API}/entry/logs?limit=1000`);
-      const list = Array.isArray(logsRes.data)
-        ? logsRes.data
-        : logsRes.data?.data || logsRes.data?.items || [];
-
-      const inside = computeInsideFromLogs(list, selectedGate);
+      // Sunucu her kişinin son hareketini tutuyor: 500 kayıt sınırı yok,
+      // başka kapıdan çıkan kişi de bu listeden düşer.
+      const res = await axios.get(`${API}/entry/inside`, { params: { gate: selectedGate } });
+      const inside = (res.data?.items || []).map(toInsideItem);
 
       setInsideList((prev) => (sameInside(prev, inside) ? prev : inside));
     } catch (e) {
@@ -272,6 +197,13 @@ const SecurityCheck = () => {
       });
     }
   };
+
+  // Başka bir kapıda giriş/çıkış olunca listeyi hemen yenile
+  const { lastMessage } = useWebSocket() || {};
+  useEffect(() => {
+    if (lastMessage?.type === 'NEW_ENTRY') fetchInside({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMessage]);
 
   // Gate değişince + 10sn polling (silent)
   useEffect(() => {
@@ -296,24 +228,8 @@ const SecurityCheck = () => {
 
       // seçilen kişinin içeride mi kontrolü
       try {
-        const logsRes = await axios.get(`${API}/entry/logs?limit=2000`);
-        const list = Array.isArray(logsRes.data)
-          ? logsRes.data
-          : logsRes.data?.data || logsRes.data?.items || [];
-
-        const pid = person.id;
-
-        const my = list
-          .filter((x) => {
-            const id =
-              x?.personnel_id || x?.personnelId || x?.person_id || x?.personId || x?.personnel?.id;
-            return String(id || '') === String(pid);
-          })
-          .sort((a, b) => new Date(getLogTs(b) || 0) - new Date(getLogTs(a) || 0));
-
-        const last = my[0];
-        const a = normalizeAction(last);
-        setIsInside(a === 'in');
+        const statusRes = await axios.get(`${API}/entry/status/${encodeURIComponent(person.id)}`);
+        setIsInside(statusRes.data?.is_inside === true);
       } catch (e) {
         console.warn('Could not load last entry status', e);
         setIsInside(false);
