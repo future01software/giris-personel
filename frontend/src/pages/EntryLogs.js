@@ -327,6 +327,11 @@ const EntryLogs = () => {
                         <MapPin className="w-3.5 h-3.5 text-slate-400" />
                         {t(log.gate || 'mainGate')}
                       </div>
+                      {log.auto_closed && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 font-bold uppercase tracking-wide">
+                          {t('autoExitBadge')}
+                        </span>
+                      )}
                     </div>
                   </div>
 

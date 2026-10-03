@@ -393,6 +393,11 @@ const Dashboard = () => {
                         <div className="flex items-center gap-2 text-[9px] text-slate-400 mt-0.5 font-semibold uppercase tracking-wider">
                           <MapPin className="w-3 h-3 stroke-[2.1]" />
                           {GATE_NAMES[log._gate] || log._gate || t('mainGate')}
+                          {log.auto_closed && (
+                            <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+                              {t('autoExitBadge')}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

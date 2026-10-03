@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import Headline from '../components/Headline';
 import { useTheme } from '../contexts/ThemeContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Plus, Trash2, Sun, Moon, Globe, Monitor, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Sun, Moon, Globe, Monitor, AlertTriangle, ChevronRight, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
@@ -36,10 +36,60 @@ const Settings = () => {
     latency: null
   });
 
+  // Otomatik çıkış (unutulan çıkışlar)
+  const [autoClose, setAutoClose] = useState({ enabled: false, hours: 14 });
+  const [autoCloseSaving, setAutoCloseSaving] = useState(false);
+  const [autoClosePreview, setAutoClosePreview] = useState(null);
+  const [autoCloseRunning, setAutoCloseRunning] = useState(false);
+
   useEffect(() => {
     fetchDocumentTypes();
     checkSystemStatus();
+    fetchAutoClose();
   }, []);
+
+  const fetchAutoClose = async () => {
+    try {
+      const res = await axios.get(`${API}/entry/auto-close/settings`);
+      setAutoClose(res.data);
+    } catch (error) {
+      console.error('Failed to load auto-close settings:', error);
+    }
+  };
+
+  const saveAutoClose = async () => {
+    setAutoCloseSaving(true);
+    try {
+      const res = await axios.put(`${API}/entry/auto-close/settings`, {
+        enabled: autoClose.enabled,
+        hours: Number(autoClose.hours),
+      });
+      setAutoClose(res.data);
+      setAutoClosePreview(null);
+      toast.success(t('autoCloseSaved'));
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || t('operationFailed'));
+    } finally {
+      setAutoCloseSaving(false);
+    }
+  };
+
+  const runAutoClose = async (dryRun) => {
+    setAutoCloseRunning(true);
+    try {
+      const res = await axios.post(`${API}/entry/auto-close`, null, { params: { dry_run: dryRun } });
+      if (dryRun) {
+        setAutoClosePreview(res.data.items || []);
+      } else {
+        setAutoClosePreview(null);
+        toast.success(t('autoCloseDone', { count: res.data.closed || 0 }));
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || t('operationFailed'));
+    } finally {
+      setAutoCloseRunning(false);
+    }
+  };
 
   const checkSystemStatus = async () => {
     const start = performance.now();
@@ -168,6 +218,87 @@ const Settings = () => {
             </div>
           </div>
         </button>
+      </div>
+
+      {/* Auto Close Section */}
+      <div className="bg-white dark:bg-[#080808] border border-slate-100 dark:border-white/5 rounded-2xl p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <Clock className="w-5 h-5 text-amber-500" />
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            {t('autoCloseTitle')}
+          </h2>
+        </div>
+        <p className="text-sm text-slate-600 dark:text-slate-300 mb-5">
+          {t('autoCloseDesc', { hours: autoClose.hours })}
+        </p>
+
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200 cursor-pointer">
+            <input
+              type="checkbox"
+              className="w-4 h-4"
+              checked={autoClose.enabled}
+              onChange={(e) => setAutoClose({ ...autoClose, enabled: e.target.checked })}
+            />
+            {t('autoCloseEnabled')}
+          </label>
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
+              {t('autoCloseHours')}
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={72}
+              value={autoClose.hours}
+              onChange={(e) => setAutoClose({ ...autoClose, hours: e.target.value })}
+              className="w-24 px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111] text-slate-900 dark:text-slate-100"
+            />
+          </div>
+          <button
+            onClick={saveAutoClose}
+            disabled={autoCloseSaving}
+            className="px-4 py-2 bg-slate-900 dark:bg-slate-200 text-white dark:text-slate-900 rounded-xl text-sm font-medium disabled:opacity-50"
+          >
+            {t('save')}
+          </button>
+          <button
+            onClick={() => runAutoClose(true)}
+            disabled={autoCloseRunning}
+            className="px-4 py-2 rounded-xl text-sm font-medium border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-200 disabled:opacity-50"
+          >
+            {t('autoClosePreview')}
+          </button>
+        </div>
+
+        {autoClosePreview && (
+          <div className="mt-5 rounded-xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/5 p-4">
+            {autoClosePreview.length === 0 ? (
+              <p className="text-sm text-slate-700 dark:text-slate-300">{t('autoCloseNone')}</p>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
+                  {t('autoCloseWillClose', { count: autoClosePreview.length })}
+                </p>
+                <ul className="text-sm text-slate-700 dark:text-slate-300 space-y-1 mb-4 max-h-48 overflow-y-auto">
+                  {autoClosePreview.map((x) => (
+                    <li key={x.personnel_id}>
+                      {x.full_name || x.personnel_id} — {x.company} · {t('autoCloseInSince')}{' '}
+                      {x.last_at ? new Date(x.last_at).toLocaleString(i18n.language) : '-'}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => runAutoClose(false)}
+                  disabled={autoCloseRunning}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-medium disabled:opacity-50"
+                >
+                  {t('autoCloseRunNow')}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Document Types Section */}
