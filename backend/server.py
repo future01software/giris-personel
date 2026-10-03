@@ -1,3 +1,4 @@
+import asyncio
 import traceback
 import importlib
 import logging
@@ -8,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.websocket import manager
 from app.db import ensure_indexes
+from app.presence import ensure_presence_ready
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -52,8 +54,7 @@ app.add_middleware(
 # Add GZip compression for responses > 1KB
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-@app.on_event("startup")
-async def startup_event():
+async def _init_database():
     try:
         logger.info("Initializing database indexes...")
         await ensure_indexes()
@@ -61,6 +62,18 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Failed to initialize database indexes: {e}")
         print(traceback.format_exc())
+    await ensure_presence_ready()
+
+
+_init_task = None
+
+
+@app.on_event("startup")
+async def startup_event():
+    # Arka planda çalışır: indeksler zaten mevcut, sunucunun istek kabul etmesini
+    # (soğuk başlangıçta ilk login'i) bekletmesin.
+    global _init_task
+    _init_task = asyncio.create_task(_init_database())
 
 # =========================
 # SAFE ROUTER LOADING

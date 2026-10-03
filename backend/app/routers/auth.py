@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.concurrency import run_in_threadpool
 from datetime import datetime, timezone, timedelta
 import secrets
 import os
@@ -12,11 +13,20 @@ from app.services.mailer import send_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+ALLOWED_ROLES = {"admin", "security", "supervisor"}
+
 
 @router.post("/register")
-async def register(user_data: UserCreate):
+async def register(user_data: UserCreate, current_user: dict = Depends(get_current_user)):
+    # Sadece admin kullanıcı oluşturabilir (herkese açık kayıt, kendine admin rolü verilmesine izin veriyordu)
+    await require_role(current_user, ["admin"])
+
+    role = (user_data.role or "security").strip().lower()
+    if role not in ALLOWED_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+
     email = norm_email(str(user_data.email))
-    username = user_data.username.strip().lower()
+    username = (user_data.username or email.split("@")[0]).strip().lower()
 
     existing_email = await db.users.find_one({"email": email})
     if existing_email:
@@ -30,9 +40,9 @@ async def register(user_data: UserCreate):
         "id": new_id("user"),
         "username": username,
         "email": email,
-        "password": hash_password(user_data.password),
+        "password": await run_in_threadpool(hash_password, user_data.password),
         "full_name": user_data.full_name.strip(),
-        "role": (user_data.role or "security").strip(),
+        "role": role,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user_doc)
@@ -74,7 +84,8 @@ async def login(credentials: UserLogin):
     if not isinstance(hashed, str) or not hashed.startswith("$2"):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if not verify_password(credentials.password, hashed):
+    # bcrypt ~250 ms CPU; thread'de çalışsın ki o sırada diğer istekler beklemesin
+    if not await run_in_threadpool(verify_password, credentials.password, hashed):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_access_token({"sub": user["id"], "role": user.get("role", "security")})
@@ -100,49 +111,6 @@ async def me(current_user: dict = Depends(get_current_user)):
         "full_name": current_user["full_name"],
         "role": current_user["role"],
     }
-
-
-@router.get("/seed-admin")
-async def seed_admin():
-    email = norm_email("ilker.bocek@gmail.com")
-    username = "admin"
-    plain_password = "123456"
-
-    # email varsa dokunma
-    existing_by_email = await db.users.find_one({"email": email})
-    if existing_by_email:
-        # ensure username exists
-        if not existing_by_email.get("username"):
-            await db.users.update_one({"email": email}, {"$set": {"username": username}})
-        return {"status": "already exists", "email": email, "username": existing_by_email.get("username", username)}
-
-    # id=1 varsa update et
-    existing_by_id = await db.users.find_one({"id": "1"})
-    if existing_by_id:
-        await db.users.update_one(
-            {"id": "1"},
-            {"$set": {
-                "username": username,
-                "email": email,
-                "full_name": "Admin",
-                "password": hash_password(plain_password),
-                "role": "admin",
-            }}
-        )
-        return {"status": "updated id=1", "email": email, "username": username, "password": plain_password}
-
-    # yoksa oluştur
-    user = {
-        "id": "1",
-        "username": username,
-        "email": email,
-        "full_name": "Admin",
-        "password": hash_password(plain_password),
-        "role": "admin",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.users.insert_one(user)
-    return {"status": "created", "email": email, "username": username, "password": plain_password}
 
 
 @router.post("/forgot-password")
@@ -225,7 +193,7 @@ async def reset_password(data: dict):
     await db.users.update_one(
         {"id": user["id"]},
         {
-            "$set": {"password": hash_password(new_password)},
+            "$set": {"password": await run_in_threadpool(hash_password, new_password)},
             "$unset": {"reset_token": 1, "reset_token_expiry": 1}
         }
     )

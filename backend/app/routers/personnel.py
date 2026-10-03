@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.responses import StreamingResponse
-import pandas as pd
 import io
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
@@ -702,6 +701,7 @@ async def delete_personnel(personnel_id: str, current_user: dict = Depends(get_c
         raise HTTPException(status_code=404, detail="Personnel not found")
 
     await db.personnel_documents.delete_many({"personnel_id": personnel_id})
+    await db.entry_presence.delete_many({"person_id": personnel_id})
     return {"message": "Personnel deleted"}
 
 
@@ -711,6 +711,9 @@ async def bulk_import_personnel(file: UploadFile = File(...), current_user: dict
 
     if not file.filename.endswith((".xlsx", ".xls", ".csv")):
         raise HTTPException(status_code=400, detail="File must be Excel or CSV format")
+
+    # pandas ağır (~1-2 sn); sunucu açılışını yavaşlatmasın diye sadece burada yüklenir
+    import pandas as pd
 
     try:
         contents = await file.read()
@@ -861,4 +864,5 @@ async def bulk_delete_personnel(payload: BulkDeleteRequest, current_user: dict =
 
     personnel_result = await db.personnel.delete_many({"id": {"$in": payload.ids}})
     await db.personnel_documents.delete_many({"personnel_id": {"$in": payload.ids}})
+    await db.entry_presence.delete_many({"person_id": {"$in": payload.ids}})
     return {"deleted_count": personnel_result.deleted_count}

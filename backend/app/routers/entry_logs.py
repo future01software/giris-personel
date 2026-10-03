@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, List, Dict, Any
 import math
+import re
 
 from app.db import db, DEMO_MODE
 from app.deps import get_current_user
@@ -77,40 +78,44 @@ def _ts_of(log: dict) -> float:
             return 0.0
     return 0.0
 
+def _legacy_day_clauses(day: str) -> List[Dict[str, Any]]:
+    """
+    Sayısal zaman alanı olmayan eski kayıtlar için ISO string ön eki ile gün eşleşmesi.
+    Sayısal alanı olan kayıtlara uygulanmaz; yoksa UTC tarih ön eki yüzünden
+    TR 00:00-03:00 arası kayıtlar yanlış güne de düşüyordu.
+    """
+    regex = {"$regex": f"^{re.escape(day)}"}
+    no_ts = {"created_at_ts": {"$exists": False}, "timestamp_ts": {"$exists": False}}
+    return [{**no_ts, "created_at": regex}, {**no_ts, "timestamp": regex}]
+
 # =========================
 # QUERY BUILDER (day filter robust)
 # =========================
 def _build_day_query(day: Optional[str], action: Optional[str]) -> Dict[str, Any]:
-    q: Dict[str, Any] = {}
+    clauses: List[Dict[str, Any]] = []
 
     if day:
         start_local, end_local = _day_bounds(day)
         start_ts = start_local.timestamp()
         end_ts = end_local.timestamp()
 
-        day_prefix = day
-        regex = {"$regex": f"^{day_prefix}"}
-
         or_list = [
             {"created_at_ts": {"$gte": start_ts, "$lt": end_ts}},
             {"timestamp_ts": {"$gte": start_ts, "$lt": end_ts}},
-            {"created_at": regex},
-            {"timestamp": regex},
-        ]
-        q["$or"] = or_list
+        ] + _legacy_day_clauses(day)
+        clauses.append({"$or": or_list})
 
     if action:
         a = action.upper().strip()
         if a not in ("IN", "OUT"):
             raise HTTPException(status_code=400, detail="action IN veya OUT olmalı")
-        
-        # Sadece action veya decision alanına göre DB'de filtrele
-        q["$or"] = q.get("$or", []) + [
-            {"action": a},
-            {"decision": a}
-        ]
 
-    return q
+        # Gün filtresiyle VE ile birleşmeli (önceden aynı $or'a ekleniyordu -> "o gün VEYA IN")
+        clauses.append({"$or": [{"action": a}, {"decision": a}]})
+
+    if not clauses:
+        return {}
+    return clauses[0] if len(clauses) == 1 else {"$and": clauses}
 
 # =========================
 # ✅ UPDATED: SEARCH (lookback + duration_sec)
@@ -146,10 +151,11 @@ async def search_entry_logs(
         action_req = a
 
     # 1) Arama filtreleri (snapshot alanları)
+    q_regex = re.escape(q_str)  # kullanıcı girdisi regex olarak yorumlanmasın
     search_clauses = [
-        {"person_full_name": {"$regex": q_str, "$options": "i"}},
-        {"person_company": {"$regex": q_str, "$options": "i"}},
-        {"person_tc_number": {"$regex": q_str, "$options": "i"}},
+        {"person_full_name": {"$regex": q_regex, "$options": "i"}},
+        {"person_company": {"$regex": q_regex, "$options": "i"}},
+        {"person_tc_number": {"$regex": q_regex, "$options": "i"}},
     ]
     query = {"$or": search_clauses}
 
@@ -172,17 +178,12 @@ async def search_entry_logs(
         start_ts = start_local.timestamp()
         end_ts = end_local.timestamp()
         lookback_ts = start_ts - 48 * 3600  # 48 saat güvenli aralık
-        
-        day_prefix = day
-        regex = {"$regex": f"^{day_prefix}"}
 
         day_query = {
             "$or": [
                 {"created_at_ts": {"$gte": lookback_ts, "$lt": end_ts}},
                 {"timestamp_ts": {"$gte": lookback_ts, "$lt": end_ts}},
-                {"created_at": regex},
-                {"timestamp": regex},
-            ]
+            ] + _legacy_day_clauses(day)
         }
         query = {"$and": [query, day_query]}
 
@@ -451,16 +452,12 @@ async def day_totals(
     end_ts = end_local.timestamp()
 
     lookback_ts = start_ts - 24 * 3600
-    day_prefix = day
-    regex = {"$regex": f"^{day_prefix}"}
 
     q = {
         "$or": [
             {"created_at_ts": {"$gte": lookback_ts, "$lt": end_ts}},
             {"timestamp_ts": {"$gte": lookback_ts, "$lt": end_ts}},
-            {"created_at": regex},
-            {"timestamp": regex},
-        ]
+        ] + _legacy_day_clauses(day)
     }
 
     logs = [_clean(x) async for x in db["entry_logs"].find(q)]

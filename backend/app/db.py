@@ -57,6 +57,8 @@ async def ensure_indexes():
     except Exception: pass
     try: await db.users.create_index("id", unique=True)
     except Exception: pass
+    try: await db.users.create_index("username")
+    except Exception: pass
 
     try: await db.personnel.create_index("id", unique=True)
     except Exception: pass
@@ -94,6 +96,9 @@ async def ensure_indexes():
     try: await db.entry_logs.create_index([("created_at_ts", -1)])
     except Exception: pass
     try: await db.entry_logs.create_index([("timestamp_ts", -1)])
+    except Exception: pass
+    # Kayıtlar ekranı (paginated) bu iki alanla birlikte sıralıyor
+    try: await db.entry_logs.create_index([("created_at_ts", -1), ("timestamp_ts", -1)])
     except Exception: pass
     # Compound index for person + timestamp queries
     try: await db.entry_logs.create_index([("person_id", 1), ("created_at_ts", -1)])
