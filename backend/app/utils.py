@@ -1,6 +1,6 @@
 import re
 from uuid import uuid4
-from datetime import datetime, timezone
+from datetime import date, datetime, time as dt_time, timedelta, timezone
 from typing import Optional
 
 from .db import db
@@ -59,7 +59,7 @@ def parse_dt_safe(value) -> Optional[datetime]:
             s = str(value).strip()
             if s in ["-", "nan", "", "None", "null"]:
                 return None
-            dt = datetime.fromisoformat(s)
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
 
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
@@ -68,90 +68,147 @@ def parse_dt_safe(value) -> Optional[datetime]:
         return None
 
 
+# Türkiye'de yaz/kış saati uygulaması yok (2016'dan beri sabit UTC+3)
+TR_TZ = timezone(timedelta(hours=3))
+_DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _as_calendar_day(value) -> Optional[date]:
+    """
+    Değer sadece bir GÜN ifade ediyorsa (ör. '2026-11-20', Excel'den gelen
+    '2026-11-20 00:00:00' ya da gece yarısı UTC '2026-11-20T00:00:00Z') o günü döndürür.
+    Saat bilgisi taşıyan gerçek bir an ise None döndürür.
+    """
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        s = str(value or "").strip()
+        if _DATE_ONLY_RE.match(s):
+            try:
+                return date.fromisoformat(s)
+            except ValueError:
+                return None
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    if dt.time() != dt_time(0, 0):
+        return None
+    if dt.tzinfo is not None and dt.utcoffset() != timedelta(0):
+        return None
+    return dt.date()
+
+
+def parse_end_dt(value) -> Optional[datetime]:
+    """
+    Bitiş tarihleri (evrak son geçerlilik, görevlendirme bitiş) için:
+    sadece gün verilmişse o günün SONUNA kadar (Türkiye saatiyle 23:59:59) geçerli sayılır.
+    """
+    if not value:
+        return None
+    day = _as_calendar_day(value)
+    if day is not None:
+        return datetime.combine(day, dt_time.max, tzinfo=TR_TZ)
+    return parse_dt_safe(value)
+
+
+def parse_start_dt(value) -> Optional[datetime]:
+    """Başlangıç tarihleri için: sadece gün verilmişse o gün Türkiye saatiyle 00:00'dan itibaren."""
+    if not value:
+        return None
+    day = _as_calendar_day(value)
+    if day is not None:
+        return datetime.combine(day, dt_time.min, tzinfo=TR_TZ)
+    return parse_dt_safe(value)
+
+
+def latest_expiry_by_type(documents: list) -> dict:
+    """
+    Aynı kişide aynı evrak türünden birden fazla kayıt olabilir (eski + yenilenmiş).
+    Her (personnel_id, document_type_id) için EN GEÇ bitiş tarihini döndürür.
+    Tarihi okunamayan kayıt None sayılır (geçerli bir kayıt varsa onu ezmez).
+    """
+    latest: dict = {}
+    for d in documents:
+        key = (d.get("personnel_id"), d.get("document_type_id"))
+        exp = parse_end_dt(d.get("expiry_date"))
+        if key not in latest:
+            latest[key] = exp
+        elif exp is not None and (latest[key] is None or exp > latest[key]):
+            latest[key] = exp
+    return latest
+
+
+def is_manually_blocked(p: dict) -> bool:
+    return p.get("entry_blocked") is True or p.get("is_blocked") is True or p.get("blocked") is True
+
+
 async def compute_can_enter_map(personnel_list: list) -> dict:
     """
-    Mevcut mantığı BOZMADAN optimize:
-    - assignment_end geçmişse => cannot
-    - zorunlu evraklardan herhangi biri expired/parse error => cannot
-    - aksi halde => can
-    Not: zorunlu evrak hiç yoksa 'can' sayar (has_expired False kalır).
+    Kişi girebilir mi?
+    - yönetici engeli varsa => giremez
+    - görevlendirme başlamamış / bitmişse => giremez
+    - her zorunlu evrak türü için EN GÜNCEL kaydın süresi dolmuşsa ya da hiç kayıt yoksa => giremez
+    - aksi halde => girebilir
     """
     now = datetime.now(timezone.utc)
 
-    # 1) zorunlu doc type id'leri
     doc_types = await db.document_types.find(
         {},
         {"_id": 0, "id": 1, "is_mandatory": 1}
     ).to_list(1000)
     mandatory_type_ids = {dt["id"] for dt in doc_types if dt.get("is_mandatory")}
 
-    # Eğer zorunlu evrak tanımı hiç yoksa herkes "can" (assignment hariç)
-    # (mevcut davranışa en yakın)
     ids = [p.get("id") for p in personnel_list if p.get("id")]
     if not ids:
         return {}
 
-    # 2) Sadece EXPIRED zorunlu evrakları çek (tam liste yerine)
-    # Bu şekilde 100K yerine sadece expired olanlar gelir = çok az bellek
-    expired_personnel_ids = set()
-    present_mandatory_types = {}
-
+    latest: dict = {}
     if mandatory_type_ids:
-        now_iso = now.isoformat()
         mandatory_list = list(mandatory_type_ids)
-
         MAX_BATCH_SIZE = 500
         for i in range(0, len(ids), MAX_BATCH_SIZE):
             batch_ids = ids[i:i + MAX_BATCH_SIZE]
-            expired_docs = await db.personnel_documents.find(
-                {
-                    "personnel_id": {"$in": batch_ids},
-                    "document_type_id": {"$in": mandatory_list},
-                    "expiry_date": {"$lt": now_iso},
-                },
-                {"_id": 0, "personnel_id": 1},
-            ).to_list(len(batch_ids))
-
-            for d in expired_docs:
-                expired_personnel_ids.add(d["personnel_id"])
-
-            mandatory_docs = await db.personnel_documents.find(
+            docs = await db.personnel_documents.find(
                 {
                     "personnel_id": {"$in": batch_ids},
                     "document_type_id": {"$in": mandatory_list},
                 },
-                {"_id": 0, "personnel_id": 1, "document_type_id": 1},
-            ).to_list(len(batch_ids) * max(1, len(mandatory_list)))
-            for d in mandatory_docs:
-                present_mandatory_types.setdefault(d["personnel_id"], set()).add(d["document_type_id"])
+                {"_id": 0, "personnel_id": 1, "document_type_id": 1, "expiry_date": 1},
+            ).to_list(None)  # sınır yok: mükerrer kayıtlar yüzünden kişi atlanmasın
+            latest.update(latest_expiry_by_type(docs))
 
-    # 3) Sonuç
     result = {}
     for p in personnel_list:
         pid = p.get("id")
         if not pid:
             continue
 
-        if p.get("entry_blocked") is True or p.get("is_blocked") is True or p.get("blocked") is True:
+        if is_manually_blocked(p):
             result[pid] = False
             continue
 
-        # assignment kontrol
-        assignment_start = parse_dt_safe(p.get("assignment_start"))
+        assignment_start = parse_start_dt(p.get("assignment_start"))
         if assignment_start and assignment_start > now:
             result[pid] = False
             continue
 
-        assignment_end = parse_dt_safe(p.get("assignment_end"))
+        assignment_end = parse_end_dt(p.get("assignment_end"))
         if assignment_end and assignment_end < now:
             result[pid] = False
             continue
 
-        if mandatory_type_ids and not mandatory_type_ids.issubset(present_mandatory_types.get(pid, set())):
-            result[pid] = False
-            continue
-
-        # zorunlu evrak expiry kontrol (önceden toplu çekildi)
-        result[pid] = pid not in expired_personnel_ids
+        ok = True
+        for type_id in mandatory_type_ids:
+            key = (pid, type_id)
+            if key not in latest:          # zorunlu evrak hiç yok
+                ok = False
+                break
+            exp = latest[key]
+            if exp is None or exp < now:   # en güncel kayıt bile geçersiz/süresi dolmuş
+                ok = False
+                break
+        result[pid] = ok
 
     return result

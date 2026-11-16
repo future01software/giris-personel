@@ -11,7 +11,15 @@ from openpyxl.utils import get_column_letter
 from app.models import PersonnelCreate, BulkDeleteRequest
 from app.db import db, DEMO_MODE
 from app.deps import get_current_user, require_role
-from app.utils import new_id, compute_can_enter_map, prepare_turkish_search, parse_dt_safe
+from app.utils import (
+    new_id,
+    compute_can_enter_map,
+    prepare_turkish_search,
+    parse_start_dt,
+    parse_end_dt,
+    latest_expiry_by_type,
+    is_manually_blocked,
+)
 
 router = APIRouter(prefix="/personnel", tags=["personnel"])
 TR_TZ = ZoneInfo("Europe/Istanbul")
@@ -336,7 +344,9 @@ async def export_personnel_excel(current_user: dict = Depends(get_current_user))
 
         key = (personnel_id, document_type_id)
         current = document_by_person.get(key)
-        if current is None or str(document.get("expiry_date") or "") > str(current.get("expiry_date") or ""):
+        new_exp = parse_end_dt(document.get("expiry_date"))
+        cur_exp = parse_end_dt(current.get("expiry_date")) if current else None
+        if current is None or (new_exp is not None and (cur_exp is None or new_exp > cur_exp)):
             document_by_person[key] = document
 
     can_enter_map = await compute_can_enter_map(personnel)
@@ -392,14 +402,14 @@ async def export_personnel_excel(current_user: dict = Depends(get_current_user))
         personnel_id = person.get("id")
         can_enter = bool(can_enter_map.get(personnel_id, True))
         restriction_reasons = []
-        if person.get("entry_blocked") is True or person.get("is_blocked") is True or person.get("blocked") is True:
+        if is_manually_blocked(person):
             manual_reason = person.get("entry_block_reason") or person.get("block_reason")
             restriction_reasons.append(
                 f"Yönetici tarafından engellenmiş{f': {manual_reason}' if manual_reason else ''}"
             )
 
-        assignment_start = parse_dt_safe(person.get("assignment_start"))
-        assignment_end = parse_dt_safe(person.get("assignment_end"))
+        assignment_start = parse_start_dt(person.get("assignment_start"))
+        assignment_end = parse_end_dt(person.get("assignment_end"))
         if assignment_start and assignment_start > now:
             restriction_reasons.append("Görevlendirme henüz başlamamış")
         if assignment_end and assignment_end < now:
@@ -411,7 +421,7 @@ async def export_personnel_excel(current_user: dict = Depends(get_current_user))
             if not document:
                 restriction_reasons.append(f"Zorunlu belge eksik: {document_name}")
                 continue
-            expiry_date = parse_dt_safe(document.get("expiry_date"))
+            expiry_date = parse_end_dt(document.get("expiry_date"))
             if not expiry_date or expiry_date < now:
                 restriction_reasons.append(f"Belge süresi dolmuş: {document_name}")
 
@@ -579,49 +589,47 @@ async def get_personnel_detail(personnel_id: str, current_user: dict = Depends(g
     doc_types_map = {dt["id"]: dt for dt in doc_types}
 
     now = datetime.now(timezone.utc)
+    latest = latest_expiry_by_type(documents)
     enriched_docs = []
     for doc in documents:
-        doc_type = doc_types_map.get(doc["document_type_id"])
+        doc_type = doc_types_map.get(doc.get("document_type_id"))
         if doc_type:
-            expiry = datetime.fromisoformat(doc["expiry_date"]) if isinstance(doc["expiry_date"], str) else doc["expiry_date"]
-            if expiry.tzinfo is None:
-                expiry = expiry.replace(tzinfo=timezone.utc)
-            days_until_expiry = (expiry - now).days
-
-            if days_until_expiry < 0:
+            expiry = parse_end_dt(doc.get("expiry_date"))
+            if expiry is None:
+                # tarih okunamadı: sayfa çökmesin, evrak geçersiz sayılsın
+                days_until_expiry = None
                 status_ = "expired"
-            elif days_until_expiry <= doc_type["warning_days"]:
-                status_ = "warning"
             else:
-                status_ = "valid"
+                days_until_expiry = (expiry - now).days
+                if expiry < now:
+                    status_ = "expired"
+                elif days_until_expiry <= int(doc_type.get("warning_days") or 30):
+                    status_ = "warning"
+                else:
+                    status_ = "valid"
 
+            key = (doc.get("personnel_id"), doc.get("document_type_id"))
             enriched_docs.append({
                 **doc,
                 "document_type": doc_type,
                 "status": status_,
-                "days_until_expiry": days_until_expiry
+                "days_until_expiry": days_until_expiry,
+                # aynı türden daha yeni bir kayıt varsa bu kayıt artık dikkate alınmaz
+                "superseded": latest.get(key) is not None and expiry != latest.get(key),
             })
 
     restriction_reasons = []
-    assignment_expired = False
-    assignment_not_started = False
-    if personnel.get("assignment_start"):
-        assignment_start = datetime.fromisoformat(personnel["assignment_start"]) if isinstance(personnel["assignment_start"], str) else personnel["assignment_start"]
-        if assignment_start.tzinfo is None:
-            assignment_start = assignment_start.replace(tzinfo=timezone.utc)
-        assignment_not_started = assignment_start > now
-        if assignment_not_started:
-            restriction_reasons.append({"code": "assignment_not_started"})
+    assignment_start = parse_start_dt(personnel.get("assignment_start"))
+    assignment_not_started = bool(assignment_start and assignment_start > now)
+    if assignment_not_started:
+        restriction_reasons.append({"code": "assignment_not_started"})
 
-    if personnel.get("assignment_end"):
-        assignment_end = datetime.fromisoformat(personnel["assignment_end"]) if isinstance(personnel["assignment_end"], str) else personnel["assignment_end"]
-        if assignment_end.tzinfo is None:
-            assignment_end = assignment_end.replace(tzinfo=timezone.utc)
-        if assignment_end < now:
-            assignment_expired = True
-            restriction_reasons.append({"code": "assignment_expired"})
+    assignment_end = parse_end_dt(personnel.get("assignment_end"))
+    assignment_expired = bool(assignment_end and assignment_end < now)
+    if assignment_expired:
+        restriction_reasons.append({"code": "assignment_expired"})
 
-    if personnel.get("entry_blocked") is True or personnel.get("is_blocked") is True or personnel.get("blocked") is True:
+    if is_manually_blocked(personnel):
         restriction_reasons.append({
             "code": "admin_blocked",
             "detail": personnel.get("block_reason") or personnel.get("entry_block_reason") or ""
@@ -638,10 +646,17 @@ async def get_personnel_detail(personnel_id: str, current_user: dict = Depends(g
             "documents": [dt.get("name_tr") or dt.get("name_en") or "" for dt in missing_mandatory]
         })
 
-    expired_mandatory = [
+    # Her zorunlu tür için sadece EN GÜNCEL kayda bakılır (eski, yenilenmiş kayıt engellemez)
+    current_mandatory = [
         d for d in enriched_docs
-        if d.get("document_type", {}).get("is_mandatory") and d.get("status") == "expired"
+        if d.get("document_type", {}).get("is_mandatory") and not d.get("superseded")
     ]
+    expired_mandatory = []
+    seen_types = set()
+    for d in current_mandatory:
+        if d.get("status") == "expired" and d.get("document_type_id") not in seen_types:
+            seen_types.add(d.get("document_type_id"))
+            expired_mandatory.append(d)
     if expired_mandatory:
         restriction_reasons.append({
             "code": "document_expired",
@@ -657,8 +672,7 @@ async def get_personnel_detail(personnel_id: str, current_user: dict = Depends(g
         overall_status = "red"
         status_reason = restriction_reasons[0]["code"]
     else:
-        mandatory_docs = [d for d in enriched_docs if d["document_type"]["is_mandatory"]]
-        has_warning = any(d["status"] == "warning" for d in mandatory_docs)
+        has_warning = any(d["status"] == "warning" for d in current_mandatory)
 
         if has_warning:
             overall_status = "yellow"
