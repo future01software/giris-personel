@@ -1,9 +1,17 @@
 import os
+import logging
 import jwt
 import bcrypt
 from datetime import datetime, timezone, timedelta
 
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+_DEFAULT_SECRET = "your-secret-key-change-in-production"
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY") or _DEFAULT_SECRET
+if SECRET_KEY == _DEFAULT_SECRET:
+    # Uygulamayı durdurmuyoruz (canlı sistem kapanmasın) ama loglarda net görünsün.
+    logging.getLogger(__name__).warning(
+        "GÜVENLİK UYARISI: JWT_SECRET_KEY tanımlı değil, herkesin bildiği varsayılan anahtar kullanılıyor. "
+        "Cloud Run ortam değişkenlerine uzun ve rastgele bir JWT_SECRET_KEY ekleyin."
+    )
 ALGORITHM = "HS256"
 
 

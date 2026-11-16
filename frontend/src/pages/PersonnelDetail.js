@@ -67,6 +67,8 @@ const PersonnelDetail = () => {
     expiry_date: '',
     notes: '',
   });
+  // Aynı türde evrak varsa: yeni evrak eskisinin yerine geçsin mi (eski kayıt silinir)
+  const [replaceOldDocs, setReplaceOldDocs] = useState(true);
 
   const fetchWithRetry = useCallback(async (url, retries = 3, delay = 500) => {
     for (let i = 0; i < retries; i++) {
@@ -198,14 +200,35 @@ const PersonnelDetail = () => {
         setDocForm({ document_type_id: '', expiry_date: '', notes: '' });
         return;
       }
+      const oldDocsOfType = (data?.documents || []).filter(
+        (d) => d.document_type_id === docForm.document_type_id
+      );
       await axios.post(`${API}/documents`, {
         ...docForm,
         expiry_date: addOneYear(docForm.expiry_date),
         personnel_id: id,
       });
+      // Yeni evrak kaydedildikten SONRA eskileri kaldır (önce silip eklemede hata olursa evrak kaybolmasın)
+      if (replaceOldDocs && oldDocsOfType.length > 0) {
+        const results = await Promise.allSettled(
+          oldDocsOfType.map((d) =>
+            axios.delete(`${API}/documents/${d.id}`, {
+              params: { personnel_id: d.personnel_id, document_type_id: d.document_type_id },
+            })
+          )
+        );
+        if (results.some((r) => r.status === 'rejected')) {
+          toast.warning(
+            i18n.language === 'tr'
+              ? 'Yeni evrak eklendi ama eski kayıt kaldırılamadı. Giriş kontrolü yine de yeni evrakı esas alır.'
+              : 'New document added, but the old record could not be removed. Entry checks still use the newest document.'
+          );
+        }
+      }
       toast.success(t('documentAdded'));
       setIsAddDocOpen(false);
       setDocForm({ document_type_id: '', expiry_date: '', notes: '' });
+      setReplaceOldDocs(true);
       fetchData();
     } catch (error) {
       console.error('Add document failed:', error);
@@ -635,6 +658,31 @@ const PersonnelDetail = () => {
                 </div>
               </div>
 
+              {(() => {
+                const sameTypeCount = (data?.documents || []).filter(
+                  (d) => d.document_type_id === docForm.document_type_id
+                ).length;
+                if (!docForm.document_type_id || sameTypeCount === 0) return null;
+                return (
+                  <label
+                    className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+                    data-testid="doc-replace-old"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4"
+                      checked={replaceOldDocs}
+                      onChange={(e) => setReplaceOldDocs(e.target.checked)}
+                    />
+                    <span>
+                      {i18n.language === 'tr'
+                        ? `Bu türde ${sameTypeCount} kayıt zaten var. Yeni evrak eskisinin yerine geçsin (eski kayıt silinir).`
+                        : `${sameTypeCount} record(s) of this type already exist. Replace them with the new document (old records are deleted).`}
+                    </span>
+                  </label>
+                );
+              })()}
+
               <div className="flex gap-2 justify-end">
                 <Button
                   type="button"
@@ -665,16 +713,24 @@ const PersonnelDetail = () => {
               {data.documents.map((doc) => {
                 const days = doc.days_until_expiry;
                 const locale = i18n.language === 'tr' ? 'tr-TR' : 'en-US';
+                const isSuperseded = doc.superseded === true;
 
                 return (
                   <div
                     key={getDocumentRecordKey(doc)}
-                    className={`flex items-center justify-between p-4 rounded-lg border ${getDocRowClass(doc.status)}`}
+                    className={`flex items-center justify-between p-4 rounded-lg border ${
+                      isSuperseded ? `${getDocRowClass('')} opacity-60` : getDocRowClass(doc.status)
+                    }`}
                     data-testid={`document-${getDocumentRecordKey(doc)}`}
                   >
                     <div className="flex-1">
                       <p className={`font-semibold ${titleText}`}>
                         {i18n.language === 'tr' ? doc.document_type.name_tr : doc.document_type.name_en}
+                        {isSuperseded && (
+                          <span className="ml-2 rounded-md bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-white/10 dark:text-slate-300">
+                            {i18n.language === 'tr' ? 'Eski kayıt · dikkate alınmıyor' : 'Old record · ignored'}
+                          </span>
+                        )}
                       </p>
 
                       <p className={`text-sm mt-1 ${subText}`}>

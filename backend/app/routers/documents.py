@@ -44,6 +44,11 @@ async def delete_document_type(type_id: str, current_user: dict = Depends(get_cu
 async def create_personnel_document(data: PersonnelDocumentCreate, current_user: dict = Depends(get_current_user)):
     await require_role(current_user, ["admin"])
 
+    if not await db.personnel.find_one({"id": data.personnel_id}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail="Personnel not found")
+    if not await db.document_types.find_one({"id": data.document_type_id}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail="Document type not found")
+
     doc = {
         "id": new_id("doc"),
         "personnel_id": data.personnel_id,

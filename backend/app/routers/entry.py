@@ -14,7 +14,7 @@ from app.models import EntryDecision
 from app.db import db, DEMO_MODE
 from app.deps import get_current_user, require_role
 from app.presence import PRESENCE, ensure_presence_ready, record_presence, rebuild_presence
-from app.utils import new_id
+from app.utils import new_id, compute_can_enter_map
 from app.websocket import manager
 
 router = APIRouter(prefix="/entry", tags=["entry"])
@@ -78,6 +78,18 @@ async def make_entry_decision(decision: EntryDecision, current_user: dict = Depe
     personnel = None
     if personnel_id:
         personnel = await db.personnel.find_one({"id": personnel_id})
+
+    # Girişe sunucu tarafında da izin kontrolü (ekran atlansa bile yetkisiz IN yazılamasın).
+    # Çıkış (OUT) her zaman serbest: içerideki kişi çıkarılabilmeli.
+    if action == "IN" and not DEMO_MODE:
+        if not personnel:
+            raise HTTPException(status_code=404, detail="Personel bulunamadı.")
+        can_map = await compute_can_enter_map([personnel])
+        if not can_map.get(personnel_id, False):
+            raise HTTPException(
+                status_code=403,
+                detail="Bu personelin giriş izni yok (evrak eksik/süresi dolmuş, görevlendirme uygun değil veya engellenmiş).",
+            )
 
     person_full_name = (personnel or {}).get("full_name") or ""
     person_company = (personnel or {}).get("company") or ""
